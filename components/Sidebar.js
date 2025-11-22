@@ -12,92 +12,102 @@ export default function Sidebar() {
 
   if (!user || pathname === '/login') return null;
 
-  const isActive = (path) => {
-    // Cek apakah path saat ini diawali dengan href menu (untuk active state)
-    const active = pathname === path;
-    return active
-      ? "bg-indigo-600/10 text-indigo-400 border-r-4 border-indigo-500 font-semibold" 
-      : "text-slate-400 hover:text-slate-100 hover:bg-white/5 border-r-4 border-transparent";
+  // Fungsi styling menu item
+  const MenuItem = ({ href, label, activePath }) => {
+    const active = pathname === href;
+    return (
+      <Link 
+        href={href} 
+        className={`group relative flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 mb-1 
+        ${active 
+          ? "bg-brand-600 text-white shadow-glow font-medium" 
+          : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-100"}`}
+      >
+        {/* Ikon dot kecil sebagai hiasan jika aktif */}
+        {active && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white/30 rounded-r-full"></span>
+        )}
+        
+        {/* Placeholder Icon Area (Nanti ganti dengan Icon Library) */}
+        <span className={`w-5 h-5 flex items-center justify-center mr-3 text-xs border rounded ${active ? 'border-white/30 bg-white/10' : 'border-slate-700 bg-transparent'}`}>
+            {label.charAt(0)}
+        </span>
+
+        <span className="text-sm tracking-wide">{label}</span>
+      </Link>
+    );
   };
 
+  // Separator label
+  const MenuLabel = ({ title }) => (
+    <div className="px-4 mt-6 mb-3 flex items-center">
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</span>
+    </div>
+  );
+
   const handleLogout = async () => {
-    if(confirm('Keluar dari sistem?')) {
-        try { await signOut(auth); } catch (error) { alert('Gagal logout'); }
-    }
+    try { await signOut(auth); } catch (error) { alert('Gagal logout'); }
   };
 
   return (
-    <aside className="hidden w-72 bg-[#0f172a] text-slate-300 flex-col h-full fixed left-0 top-0 z-30 md:flex shadow-2xl font-sans">
-      {/* --- BRAND --- */}
-      <div className="h-20 flex items-center px-8 border-b border-slate-800/50">
+    <aside className="hidden md:flex flex-col w-72 h-screen fixed left-0 top-0 z-30 bg-sidebar-bg border-r border-sidebar-border">
+      
+      {/* 1. Header Brand */}
+      <div className="h-20 flex items-center px-6 border-b border-sidebar-border bg-sidebar-bg/50 backdrop-blur-xl">
         <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-indigo-900/50 ring-1 ring-white/10">
-            <span className="font-bold text-xl tracking-tighter">B</span>
+          {/* Logo Icon */}
+          <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center shadow-lg shadow-brand-600/20 border border-brand-500">
+            <span className="font-bold text-xl text-white">B</span>
           </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-white leading-tight">Bobing</h1>
-            <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Command Center</p>
+          {/* Brand Text */}
+          <div className="flex flex-col">
+            <h1 className="text-lg font-bold text-white leading-none tracking-tight">Bobing</h1>
+            <span className="text-[10px] font-medium text-brand-500 mt-1">Command Center</span>
           </div>
         </div>
       </div>
 
-      {/* --- NAVIGATION --- */}
-      <nav className="flex-1 py-6 overflow-y-auto scrollbar-hide text-sm space-y-1">
-        <div className="px-4 mb-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-2">Overview</p>
-            <Link href="/dashboard" className={`flex items-center px-4 py-3 transition-all duration-200 ${isActive('/dashboard')}`}>
-                <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
-                Dashboard
-            </Link>
-        </div>
+      {/* 2. Navigation Area */}
+      <nav className="flex-1 px-4 py-6 overflow-y-auto scrollbar-hide">
+        
+        <MenuLabel title="Overview" />
+        <MenuItem href="/dashboard" label="Dashboard" />
 
-        <div className="px-4 mt-8 mb-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-2">Master Data</p>
-            <Link href="/products" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/products')}`}>Produk (Parent)</Link>
-            <Link href="/variants" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/variants')}`}>Variants (SKU)</Link>
-            <Link href="/brands" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/brands')}`}>Brands</Link>
-            <Link href="/categories" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/categories')}`}>Categories</Link>
-            <Link href="/warehouses" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/warehouses')}`}>Warehouses</Link>
-            <Link href="/suppliers" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/suppliers')}`}>Suppliers</Link>
-            <Link href="/customers" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/customers')}`}>Customers (CRM)</Link>
-            <Link href="/finance-accounts" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/finance-accounts')}`}>Chart of Accounts</Link>
-        </div>
+        <MenuLabel title="Master Data" />
+        <MenuItem href="/products" label="Produk (Parent)" />
+        <MenuItem href="/variants" label="Variants (SKU)" />
+        <MenuItem href="/brands" label="Brands" />
+        <MenuItem href="/categories" label="Categories" />
+        <MenuItem href="/warehouses" label="Warehouses" />
+        <MenuItem href="/suppliers" label="Suppliers" />
+        
+        <MenuLabel title="Finance & CRM" />
+        <MenuItem href="/customers" label="Customers" />
+        <MenuItem href="/finance-accounts" label="Chart of Accounts" />
 
-        <div className="px-4 mt-8 mb-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-2">Operasional</p>
-            <Link href="/inventory" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/inventory')}`}>Inventory & Stok</Link>
-            <Link href="/supplier-sessions" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/supplier-sessions')}`}>Virtual Stock (JIT)</Link>
-            <Link href="/purchases" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/purchases')}`}>Pembelian (PO)</Link>
-        </div>
-
-        <div className="px-4 mt-8 mb-2">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-2">Penjualan</p>
-            <Link href="/sales-manual" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/sales-manual')}`}>Kasir / POS</Link>
-            <Link href="/sales-import" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/sales-import')}`}>Import Sales</Link>
-        </div>
-
-        <div className="px-4 mt-8 mb-10">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-4 mb-2">Keuangan</p>
-            <Link href="/cash" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/cash')}`}>Cash Flow</Link>
-            <Link href="/finance-reports" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/finance-reports')}`}>Laba Rugi (P&L)</Link>
-            <Link href="/finance-balance" className={`flex items-center px-4 py-2.5 rounded-lg transition-all ${isActive('/finance-balance')}`}>Neraca (Balance)</Link>
-        </div>
       </nav>
 
-      {/* --- FOOTER USER --- */}
-      <div className="p-4 border-t border-slate-800/50 bg-slate-950/30">
-        <div className="flex items-center gap-3 mb-3 px-2">
-            <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-xs font-bold border border-indigo-500/30">
-                {user?.email?.charAt(0).toUpperCase() || 'A'}
+      {/* 3. User Profile & Logout (Bottom) */}
+      <div className="p-4 border-t border-sidebar-border bg-[#0b1120]">
+        <div className="flex flex-col gap-3">
+            {/* User Info Mini */}
+            <div className="flex items-center gap-3 px-2">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-500 to-purple-500 flex items-center justify-center text-xs text-white font-bold">
+                    {user?.email?.charAt(0).toUpperCase() || "A"}
+                </div>
+                <div className="overflow-hidden">
+                    <p className="text-xs text-white font-medium truncate">{user?.email}</p>
+                    <p className="text-[10px] text-slate-500">Administrator</p>
+                </div>
             </div>
-            <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{user?.email}</p>
-                <p className="text-[10px] text-slate-500">Online</p>
-            </div>
+
+            <button 
+                onClick={handleLogout} 
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium text-rose-400 hover:text-white hover:bg-rose-600/90 rounded-lg transition-all duration-200 border border-rose-900/30 hover:border-rose-500"
+            >
+                Sign Out
+            </button>
         </div>
-        <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-2 text-xs font-bold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-all border border-red-500/20">
-          Sign Out
-        </button>
       </div>
     </aside>
   );

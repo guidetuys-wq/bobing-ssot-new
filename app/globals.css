@@ -1,50 +1,69 @@
+/* app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* --- Scrollbar Modern --- */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
-}
-
-/* --- Global Styles --- */
+/* Reset & Font */
 body {
-  @apply bg-slate-50 text-slate-800 antialiased selection:bg-indigo-100 selection:text-indigo-700;
+    font-family: 'Inter', sans-serif;
+    @apply bg-slate-50 text-slate-800 antialiased;
 }
 
-/* --- Animations --- */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Modern Slim Scrollbar (revisi agar lebih halus) */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
 }
 
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+}
+
+/* Utility Classes */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Animasi Halus */
 .fade-in {
-  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* --- Utility Classes (Glassmorphism & Cards) --- */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Glass Effect Utility */
 .glass {
-  @apply bg-white/80 backdrop-blur-md border-b border-slate-200/60;
+    @apply bg-white/80 backdrop-blur-md border border-white/20;
 }
 
-.card-hover {
-  @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:border-indigo-200;
+/* Dashboard Utilities */
+.card-dashboard {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200;
 }
 
-/* Table Styles */
-.table-modern th {
-  @apply px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50/50 border-b border-slate-200;
+.stat-icon-wrapper {
+    @apply w-12 h-12 rounded-lg flex items-center justify-center text-xl mb-2;
 }
-.table-modern td {
-  @apply px-6 py-4 text-sm text-slate-700 border-b border-slate-50 transition-colors;
+
+.table-header {
+    @apply px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50/50 border-b border-slate-100;
 }
-.table-modern tr:hover td {
-  @apply bg-indigo-50/30;
+
+.table-cell {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-slate-700 border-b border-slate-50 last:border-0;
 }

@@ -1,194 +1,153 @@
 // app/dashboard/page.js
 "use client";
-import { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
-import { formatRupiah } from '@/lib/utils';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement } from 'chart.js';
-import { Line, Doughnut } from 'react-chartjs-2';
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement);
+import Link from 'next/link';
 
 export default function Dashboard() {
-    const [stats, setStats] = useState({ gross: 0, net: 0, profit: 0, margin: 0, count: 0 });
-    const [loading, setLoading] = useState(true);
-    const [filterRange, setFilterRange] = useState('this_month');
-    const [chartTrendData, setChartTrendData] = useState(null);
-    const [chartChannelData, setChartChannelData] = useState(null);
-    const [topProducts, setTopProducts] = useState([]);
+  // Dummy Data untuk Visualisasi
+  const stats = [
+    { title: "Total Penjualan", value: "Rp 124.5jt", change: "+12.5%", isUp: true, color: "bg-blue-50 text-blue-600" },
+    { title: "Order Baru", value: "1,240", change: "+8.2%", isUp: true, color: "bg-emerald-50 text-emerald-600" },
+    { title: "Stok Menipis", value: "28", change: "-5 Item", isUp: false, color: "bg-amber-50 text-amber-600" },
+    { title: "Pending Payment", value: "Rp 12jt", change: "Perlu Followup", isUp: false, color: "bg-rose-50 text-rose-600" },
+  ];
 
-    // ... (LOGIC loadData SAMA PERSIS SEPERTI SEBELUMNYA, TIDAK PERLU DIUBAH) ...
-    // Copas logic useEffect loadData dari file sebelumnya di sini
-    // Agar tidak kepanjangan, saya hanya tulis UI render barunya di bawah:
-    
-    // --- MOCK LOGIC UNTUK RENDER (Ganti dengan logic asli Anda) ---
-    useEffect(() => {
-        // Panggil logic fetch data asli Anda di sini
-        // Untuk demo UI, saya set loading false
-        setTimeout(() => setLoading(false), 1000);
-    }, [filterRange]);
-    // -------------------------------------------------------------
+  const recentOrders = [
+    { id: "#ORD-7782", customer: "Budi Santoso", date: "Hari ini, 10:23", total: "Rp 2.500.000", status: "Lunas", statusColor: "badge-success" },
+    { id: "#ORD-7781", customer: "CV. Maju Jaya", date: "Hari ini, 09:15", total: "Rp 14.200.000", status: "Pending", statusColor: "badge-warning" },
+    { id: "#ORD-7780", customer: "Toko Berkah", date: "Kemarin, 16:45", total: "Rp 850.000", status: "Dikirim", statusColor: "badge-info" },
+    { id: "#ORD-7779", customer: "Siti Aminah", date: "Kemarin, 14:20", total: "Rp 3.100.000", status: "Batal", statusColor: "badge-danger" },
+    { id: "#ORD-7778", customer: "PT. Sinar Tech", date: "21 Nov, 11:00", total: "Rp 45.000.000", status: "Lunas", statusColor: "badge-success" },
+  ];
 
-    return (
-        <div className="max-w-7xl mx-auto space-y-8 fade-in pb-20">
-            {/* HEADER SECTION */}
-            <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
-                <div>
-                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">Executive Dashboard</h2>
-                    <p className="text-slate-500 mt-1 font-medium">Overview performa bisnis & kesehatan finansial.</p>
+  return (
+    <div className="space-y-8 pb-10">
+      
+      {/* 1. Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Overview</h1>
+          <p className="text-slate-500 text-sm mt-1">Selamat datang kembali, Admin! 👋</p>
+        </div>
+        <div className="flex gap-3">
+            <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors shadow-sm">
+                Download Report
+            </button>
+            <button className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+                + Buat Order Baru
+            </button>
+        </div>
+      </div>
+
+      {/* 2. Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        {stats.map((stat, index) => (
+          <div key={index} className="card-dashboard p-5 group cursor-default">
+            <div className="flex justify-between items-start mb-4">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg ${stat.color} transition-transform group-hover:scale-110`}>
+                    {/* Placeholder Icon (Gunakan Lucide/Heroicons nanti) */}
+                    <span>★</span> 
                 </div>
-                
-                <div className="flex items-center gap-3 bg-white p-1.5 rounded-xl shadow-sm border border-slate-200">
-                    <span className="text-xs font-bold text-slate-400 pl-3 uppercase tracking-wider">Periode:</span>
-                    <select 
-                        value={filterRange}
-                        onChange={(e) => setFilterRange(e.target.value)}
-                        className="text-sm border-none bg-transparent focus:ring-0 text-slate-700 font-bold cursor-pointer py-1.5 pl-2 pr-8 rounded-lg hover:bg-slate-50 transition-colors"
-                    >
-                        <option value="today">Hari Ini</option>
-                        <option value="this_month">Bulan Ini</option>
-                        <option value="last_month">Bulan Lalu</option>
-                    </select>
-                </div>
+                <span className={`text-xs font-bold px-2 py-1 rounded-full ${stat.isUp ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {stat.change}
+                </span>
             </div>
+            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider">{stat.title}</h3>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{stat.value}</p>
+          </div>
+        ))}
+      </div>
 
-            {/* KPI CARDS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <KpiCard 
-                    title="Total Omzet" 
-                    value={loading ? '...' : formatRupiah(stats.gross)} 
-                    sub={`${stats.count} Transaksi`} 
-                    icon="💰"
-                    trend="up"
-                    color="indigo"
-                />
-                <KpiCard 
-                    title="Net Income (Cair)" 
-                    value={loading ? '...' : formatRupiah(stats.net)} 
-                    sub="Cash In Hand" 
-                    icon="bf"
-                    trend="neutral"
-                    color="emerald"
-                />
-                <KpiCard 
-                    title="Est. Profit" 
-                    value={loading ? '...' : formatRupiah(stats.profit)} 
-                    sub="Net - HPP" 
-                    icon="📈"
-                    trend="up"
-                    color="violet"
-                />
-                <KpiCard 
-                    title="Profit Margin" 
-                    value={loading ? '...' : `${stats.margin}%`} 
-                    sub="Efisiensi" 
-                    icon="aa"
-                    trend={stats.margin > 20 ? "up" : "down"}
-                    color={stats.margin > 0 ? "amber" : "rose"}
-                />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* 3. Main Table (Kiri - Lebar) */}
+        <div className="lg:col-span-2 space-y-4">
+            <div className="flex items-center justify-between">
+                <h2 className="font-bold text-lg text-slate-800">Transaksi Terakhir</h2>
+                <Link href="/orders" className="text-sm text-indigo-600 font-medium hover:underline">Lihat Semua</Link>
             </div>
-
-            {/* CHARTS SECTION */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-hover">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                            <span className="w-2 h-6 bg-blue-500 rounded-full"></span>
-                            Tren Penjualan
-                        </h3>
-                    </div>
-                    <div className="h-80 w-full relative">
-                        {/* Render Chart Component Here */}
-                        {chartTrendData ? <Line data={chartTrendData} options={{ responsive: true, maintainAspectRatio: false }} /> : <div className="h-full flex items-center justify-center text-slate-300">Chart Data Loading...</div>}
-                    </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-hover flex flex-col">
-                    <h3 className="text-base font-bold text-slate-800 mb-6 flex items-center gap-2">
-                        <span className="w-2 h-6 bg-orange-500 rounded-full"></span>
-                        Market Share
-                    </h3>
-                    <div className="h-64 w-full relative flex justify-center items-center flex-1">
-                         {/* Render Doughnut Component Here */}
-                         {chartChannelData ? <Doughnut data={chartChannelData} options={{ responsive: true, maintainAspectRatio: false, cutout: '75%' }} /> : <div className="text-slate-300">Loading...</div>}
-                    </div>
-                </div>
-            </div>
-
-            {/* TABLE SECTION */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden card-hover">
-                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-                    <h3 className="font-bold text-slate-800 text-lg">🔥 Top Produk Terlaris</h3>
-                    <button className="text-sm font-bold text-indigo-600 hover:text-indigo-700 transition-colors">Lihat Semua &rarr;</button>
-                </div>
+            
+            <div className="card-dashboard overflow-hidden border-0 ring-1 ring-slate-200">
                 <div className="overflow-x-auto">
-                    <table className="min-w-full table-modern">
+                    <table className="w-full">
                         <thead>
                             <tr>
-                                <th className="pl-8">Nama Produk</th>
-                                <th className="text-center">Terjual</th>
-                                <th className="text-right pr-8">Est. Revenue</th>
+                                <th className="table-header">Order ID</th>
+                                <th className="table-header">Pelanggan</th>
+                                <th className="table-header">Total</th>
+                                <th className="table-header">Status</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {topProducts.length === 0 ? (
-                                <tr><td colSpan="3" className="text-center py-8 text-slate-400 italic">Belum ada data penjualan.</td></tr>
-                            ) : (
-                                topProducts.map(([sku, qty], idx) => (
-                                    <tr key={idx}>
-                                        <td className="pl-8 font-medium text-slate-700">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 border border-slate-200">
-                                                    {idx + 1}
-                                                </div>
-                                                {sku}
-                                            </div>
-                                        </td>
-                                        <td className="text-center">
-                                            <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold">{qty} unit</span>
-                                        </td>
-                                        <td className="text-right pr-8 text-slate-500">-</td>
-                                    </tr>
-                                ))
-                            )}
+                            {recentOrders.map((order, i) => (
+                                <tr key={i} className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="table-cell font-medium text-slate-900">{order.id}</td>
+                                    <td className="table-cell">
+                                        <div className="flex flex-col">
+                                            <span className="text-slate-800 font-medium">{order.customer}</span>
+                                            <span className="text-xs text-slate-400">{order.date}</span>
+                                        </div>
+                                    </td>
+                                    <td className="table-cell font-bold text-slate-700">{order.total}</td>
+                                    <td className="table-cell">
+                                        <span className={`badge ${order.statusColor} border-0 px-3 py-1`}>{order.status}</span>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-    );
-}
 
-// Component KPI Card Baru yang Lebih Modern
-function KpiCard({ title, value, sub, icon, color, trend }) {
-    // Mapping warna untuk border & text
-    const colorMap = {
-        indigo: 'border-l-4 border-indigo-500 text-indigo-600',
-        emerald: 'border-l-4 border-emerald-500 text-emerald-600',
-        violet: 'border-l-4 border-violet-500 text-violet-600',
-        amber: 'border-l-4 border-amber-500 text-amber-600',
-        rose: 'border-l-4 border-rose-500 text-rose-600',
-    };
-
-    return (
-        <div className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-hover relative overflow-hidden ${colorMap[color] || ''}`}>
-            <div className="flex justify-between items-start relative z-10">
-                <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{title}</p>
-                    <h3 className="text-3xl font-extrabold text-slate-800 tracking-tight">{value}</h3>
-                </div>
-                <div className={`p-3 rounded-xl bg-slate-50 text-xl shadow-inner`}>
-                    {icon === 'bf' ? '💼' : (icon==='aa' ? '📊' : icon)}
-                </div>
-            </div>
-            <div className="mt-4 flex items-center gap-2 relative z-10">
-                {trend === 'up' && <span className="text-emerald-500 text-xs font-bold bg-emerald-50 px-2 py-0.5 rounded-full">↗ Naik</span>}
-                {trend === 'down' && <span className="text-rose-500 text-xs font-bold bg-rose-50 px-2 py-0.5 rounded-full">↘ Turun</span>}
-                <p className="text-xs text-slate-400 font-medium">{sub}</p>
-            </div>
+        {/* 4. Side Widgets (Kanan - Sempit) */}
+        <div className="space-y-6">
             
-            {/* Dekorasi Background Abstrak */}
-            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-gradient-to-br from-slate-50 to-slate-100 rounded-full opacity-50 z-0 pointer-events-none"></div>
+            {/* Widget: Quick Actions */}
+            <div className="card-dashboard p-5">
+                <h3 className="font-bold text-slate-800 mb-4">Aksi Cepat</h3>
+                <div className="grid grid-cols-2 gap-3">
+                    <Link href="/products/new" className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-700 transition-all text-slate-600 text-xs font-medium gap-2 text-center">
+                        <span className="text-lg">📦</span> Tambah Produk
+                    </Link>
+                    <Link href="/suppliers" className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-700 transition-all text-slate-600 text-xs font-medium gap-2 text-center">
+                        <span className="text-lg">🚛</span> Supplier Baru
+                    </Link>
+                    <Link href="/customers" className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-700 transition-all text-slate-600 text-xs font-medium gap-2 text-center">
+                        <span className="text-lg">👥</span> Cek Customer
+                    </Link>
+                    <Link href="/finance" className="flex flex-col items-center justify-center p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-indigo-50 hover:border-indigo-100 hover:text-indigo-700 transition-all text-slate-600 text-xs font-medium gap-2 text-center">
+                        <span className="text-lg">💰</span> Catat Beban
+                    </Link>
+                </div>
+            </div>
+
+            {/* Widget: System Status */}
+            <div className="card-dashboard p-5 bg-slate-900 text-white border-slate-800">
+                <h3 className="font-bold mb-2 text-sm">System Health</h3>
+                <div className="space-y-4 mt-4">
+                    <div>
+                        <div className="flex justify-between text-xs mb-1 text-slate-400">
+                            <span>Server Load</span>
+                            <span>24%</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-1.5">
+                            <div className="bg-emerald-500 h-1.5 rounded-full" style={{width: '24%'}}></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div className="flex justify-between text-xs mb-1 text-slate-400">
+                            <span>Storage Usage</span>
+                            <span>85%</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-1.5">
+                            <div className="bg-amber-500 h-1.5 rounded-full" style={{width: '85%'}}></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
-    );
+      </div>
+    </div>
+  );
 }

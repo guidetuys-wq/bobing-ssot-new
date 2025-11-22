@@ -111,6 +111,7 @@ __turbopack_context__.n(__TURBOPACK__imported__module__$5b$project$5d2f$componen
 "[project]/app/layout.js [app-rsc] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
 
+// app/layout.js
 __turbopack_context__.s([
     "default",
     ()=>RootLayout,
@@ -134,7 +135,7 @@ function RootLayout({ children }) {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("html", {
         lang: "id",
         children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("body", {
-            className: `${__TURBOPACK__imported__module__$5b$next$5d2f$internal$2f$font$2f$google$2f$inter_396b12ce$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["default"].className} bg-slate-50 text-slate-800`,
+            className: `${__TURBOPACK__imported__module__$5b$next$5d2f$internal$2f$font$2f$google$2f$inter_396b12ce$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["default"].className} bg-slate-50 text-slate-900`,
             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$context$2f$AuthContext$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["AuthContextProvider"], {
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                     className: "flex h-screen overflow-hidden",
@@ -145,39 +146,46 @@ function RootLayout({ children }) {
                             columnNumber: 14
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                            className: "flex-1 flex flex-col h-full relative w-full overflow-hidden bg-slate-50",
+                            className: "flex-1 flex flex-col h-full relative w-full overflow-hidden bg-slate-50 md:ml-72 transition-all duration-300",
                             children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("main", {
-                                className: "flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-8 relative scroll-smooth",
-                                children: children
+                                className: "flex-1 overflow-x-hidden overflow-y-auto p-6 md:p-10 relative scroll-smooth",
+                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "max-w-7xl mx-auto fade-in",
+                                    children: children
+                                }, void 0, false, {
+                                    fileName: "[project]/app/layout.js",
+                                    lineNumber: 29,
+                                    columnNumber: 19
+                                }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/layout.js",
-                                lineNumber: 24,
+                                lineNumber: 27,
                                 columnNumber: 17
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/layout.js",
-                            lineNumber: 22,
+                            lineNumber: 23,
                             columnNumber: 14
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/layout.js",
-                    lineNumber: 18,
+                    lineNumber: 19,
                     columnNumber: 11
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/layout.js",
-                lineNumber: 17,
+                lineNumber: 18,
                 columnNumber: 9
             }, this)
         }, void 0, false, {
             fileName: "[project]/app/layout.js",
-            lineNumber: 16,
+            lineNumber: 17,
             columnNumber: 7
         }, this)
     }, void 0, false, {
         fileName: "[project]/app/layout.js",
-        lineNumber: 15,
+        lineNumber: 16,
         columnNumber: 5
     }, this);
 }
