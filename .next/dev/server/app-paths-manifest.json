@@ -1,12 +1,13 @@
 {
-  "/brands/page": "app/brands/page.js",
-  "/categories/page": "app/categories/page.js",
+  "/cash/page": "app/cash/page.js",
   "/customers/page": "app/customers/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/finance-accounts/page": "app/finance-accounts/page.js",
+  "/finance-reports/page": "app/finance-reports/page.js",
+  "/inventory/page": "app/inventory/page.js",
   "/page": "app/page.js",
   "/products/page": "app/products/page.js",
-  "/suppliers/page": "app/suppliers/page.js",
-  "/variants/page": "app/variants/page.js",
-  "/warehouses/page": "app/warehouses/page.js"
+  "/purchases/page": "app/purchases/page.js",
+  "/sales-import/page": "app/sales-import/page.js",
+  "/sales-manual/page": "app/sales-manual/page.js",
+  "/variants/page": "app/variants/page.js"
 }

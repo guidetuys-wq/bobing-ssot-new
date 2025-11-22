@@ -81,7 +81,6 @@ function VariantsPage() {
     const [modalOpen, setModalOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const [formData, setFormData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])({});
     const [searchTerm, setSearchTerm] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('');
-    // State untuk Base SKU display di modal
     const [selectedBaseSku, setSelectedBaseSku] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('-');
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "VariantsPage.useEffect": ()=>{
@@ -122,10 +121,7 @@ function VariantsPage() {
         setSelectedBaseSku(prod ? prod.base_sku || 'No SKU' : '-');
     };
     const generateSku = ()=>{
-        if (selectedBaseSku === '-' || !formData.color || !formData.size) {
-            alert("Pilih Produk Induk, Warna, dan Ukuran dulu!");
-            return;
-        }
+        if (selectedBaseSku === '-' || !formData.color || !formData.size) return alert("Please select parent product, color and size first.");
         const colorClean = formData.color.trim().toUpperCase().replace(/\s+/g, '-');
         const sizeClean = formData.size.trim().toUpperCase().replace(/\s+/g, '-');
         const newSku = `${selectedBaseSku}-${colorClean}-${sizeClean}`;
@@ -163,21 +159,11 @@ function VariantsPage() {
         e.preventDefault();
         try {
             const payload = {
-                product_id: formData.product_id,
-                sku: formData.sku.toUpperCase(),
-                barcode: formData.barcode ? formData.barcode.toUpperCase() : formData.sku.toUpperCase(),
-                color: formData.color.toUpperCase(),
-                size: formData.size.toUpperCase(),
-                weight: Number(formData.weight) || 0,
-                cost: Number(formData.cost) || 0,
-                price: Number(formData.price) || 0,
-                min_stock: Number(formData.min_stock) || 5,
-                status: formData.status,
+                ...formData,
                 updated_at: (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["serverTimestamp"])()
             };
-            if (formData.id) {
-                await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["updateDoc"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["doc"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants", formData.id), payload);
-            } else {
+            if (formData.id) await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["updateDoc"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["doc"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants", formData.id), payload);
+            else {
                 payload.created_at = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["serverTimestamp"])();
                 await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["addDoc"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants"), payload);
             }
@@ -188,320 +174,356 @@ function VariantsPage() {
         }
     };
     const deleteVariant = async (id)=>{
-        if (confirm("Hapus SKU ini?")) {
+        if (confirm("Delete this SKU?")) {
             await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["deleteDoc"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["doc"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants", id));
             fetchData();
         }
     };
-    // Filtering Logic
     const filteredVariants = variants.filter((v)=>{
-        const pName = products.find((p)=>p.id === v.product_id)?.name.toLowerCase() || '';
         const term = searchTerm.toLowerCase();
-        return v.sku.toLowerCase().includes(term) || pName.includes(term) || v.barcode && v.barcode.toLowerCase().includes(term);
+        const pName = products.find((p)=>p.id === v.product_id)?.name.toLowerCase() || '';
+        return v.sku.toLowerCase().includes(term) || pName.includes(term);
     }).sort(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["sortBySize"]);
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-        className: "space-y-8 max-w-7xl mx-auto",
+        className: "max-w-7xl mx-auto space-y-6 fade-in pb-20",
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-100",
+                className: "flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
-                                className: "text-2xl font-bold text-slate-800 tracking-tight",
-                                children: "Master SKU"
+                                className: "text-2xl font-semibold text-gray-900 tracking-tight",
+                                children: "Variants (SKU)"
                             }, void 0, false, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 119,
+                                lineNumber: 84,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
-                                className: "text-sm text-slate-500 mt-1",
-                                children: "Manage variants, prices & barcodes."
+                                className: "text-sm text-gray-500 mt-1",
+                                children: "Manage individual stock keeping units."
                             }, void 0, false, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 120,
+                                lineNumber: 85,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/variants/page.js",
-                        lineNumber: 118,
+                        lineNumber: 83,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                        className: "flex gap-2 w-full md:w-auto",
+                        className: "flex gap-3 w-full sm:w-auto",
                         children: [
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                                type: "text",
-                                placeholder: "Search SKU / Name...",
-                                className: "border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none",
-                                value: searchTerm,
-                                onChange: (e)=>setSearchTerm(e.target.value)
-                            }, void 0, false, {
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "relative flex-1 sm:w-64",
+                                children: [
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
+                                        className: "w-5 h-5 text-gray-400 absolute left-3 top-2.5",
+                                        fill: "none",
+                                        stroke: "currentColor",
+                                        viewBox: "0 0 24 24",
+                                        children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("path", {
+                                            strokeLinecap: "round",
+                                            strokeLinejoin: "round",
+                                            strokeWidth: "2",
+                                            d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                                        }, void 0, false, {
+                                            fileName: "[project]/app/variants/page.js",
+                                            lineNumber: 89,
+                                            columnNumber: 142
+                                        }, this)
+                                    }, void 0, false, {
+                                        fileName: "[project]/app/variants/page.js",
+                                        lineNumber: 89,
+                                        columnNumber: 25
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                                        type: "text",
+                                        placeholder: "Search SKU...",
+                                        className: "w-full pl-10 pr-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none shadow-sm",
+                                        value: searchTerm,
+                                        onChange: (e)=>setSearchTerm(e.target.value)
+                                    }, void 0, false, {
+                                        fileName: "[project]/app/variants/page.js",
+                                        lineNumber: 90,
+                                        columnNumber: 25
+                                    }, this)
+                                ]
+                            }, void 0, true, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 123,
+                                lineNumber: 88,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                 onClick: ()=>openModal(),
-                                className: "bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all whitespace-nowrap",
-                                children: "+ Add SKU"
+                                className: "btn-primary whitespace-nowrap",
+                                children: "Add SKU"
                             }, void 0, false, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 130,
+                                lineNumber: 98,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/variants/page.js",
-                        lineNumber: 122,
+                        lineNumber: 87,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/variants/page.js",
-                lineNumber: 117,
+                lineNumber: 82,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden",
+                className: "card p-0 overflow-hidden",
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "overflow-x-auto",
+                    className: "table-wrapper border-0 shadow-none rounded-none",
                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
-                        className: "min-w-full divide-y divide-slate-100 text-sm",
+                        className: "table-modern",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("thead", {
-                                className: "bg-slate-50",
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                            className: "px-6 py-4 text-left font-bold text-slate-500 uppercase",
+                                            className: "pl-6",
                                             children: "SKU Final"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 141,
+                                            lineNumber: 110,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                            className: "px-6 py-4 text-left font-bold text-slate-500 uppercase",
                                             children: "Parent Product"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 142,
+                                            lineNumber: 111,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                            className: "px-6 py-4 text-left font-bold text-slate-500 uppercase",
-                                            children: "Variant"
+                                            children: "Variant Spec"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 143,
+                                            lineNumber: 112,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                            className: "px-6 py-4 text-right font-bold text-slate-500 uppercase",
+                                            className: "text-right",
                                             children: "HPP"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 144,
+                                            lineNumber: 113,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                            className: "px-6 py-4 text-right font-bold text-slate-500 uppercase",
+                                            className: "text-right",
                                             children: "Price"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 145,
+                                            lineNumber: 114,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                            className: "px-6 py-4 text-center font-bold text-slate-500 uppercase",
+                                            className: "text-center",
                                             children: "Status"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 146,
+                                            lineNumber: 115,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
-                                            className: "px-6 py-4 text-right font-bold text-slate-500 uppercase",
+                                            className: "text-right pr-6",
                                             children: "Actions"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 147,
+                                            lineNumber: 116,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 140,
+                                    lineNumber: 109,
                                     columnNumber: 29
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 139,
+                                lineNumber: 108,
                                 columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
-                                className: "bg-white divide-y divide-slate-50",
                                 children: loading ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
                                     children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
                                         colSpan: "7",
-                                        className: "text-center py-10",
+                                        className: "text-center py-12 text-gray-400",
                                         children: "Loading..."
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 151,
+                                        lineNumber: 120,
                                         columnNumber: 44
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 151,
+                                    lineNumber: 120,
                                     columnNumber: 40
                                 }, this) : filteredVariants.map((v)=>{
                                     const parent = products.find((p)=>p.id === v.product_id);
                                     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("tr", {
-                                        className: "hover:bg-slate-50",
+                                        className: "group",
                                         children: [
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                className: "px-6 py-4 font-mono font-bold text-blue-600",
+                                                className: "pl-6 font-mono text-xs font-bold text-brand-600 bg-brand-50/30 w-fit rounded-r",
                                                 children: v.sku
                                             }, void 0, false, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 155,
+                                                lineNumber: 124,
                                                 columnNumber: 41
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                className: "px-6 py-4 font-medium text-slate-700",
-                                                children: parent ? parent.name : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                    className: "text-red-400",
-                                                    children: "Deleted Parent"
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 156,
-                                                    columnNumber: 118
-                                                }, this)
+                                                className: "font-medium text-gray-700",
+                                                children: parent?.name || '-'
                                             }, void 0, false, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 156,
+                                                lineNumber: 125,
                                                 columnNumber: 41
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                className: "px-6 py-4",
-                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                    className: "bg-slate-100 px-2 py-1 rounded border",
+                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "flex gap-2",
                                                     children: [
-                                                        v.color,
-                                                        " / ",
-                                                        v.size
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                            className: "badge badge-neutral",
+                                                            children: v.color
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/variants/page.js",
+                                                            lineNumber: 128,
+                                                            columnNumber: 49
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                            className: "badge badge-neutral",
+                                                            children: v.size
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/variants/page.js",
+                                                            lineNumber: 129,
+                                                            columnNumber: 49
+                                                        }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 157,
-                                                    columnNumber: 67
-                                                }, this)
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 157,
-                                                columnNumber: 41
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                className: "px-6 py-4 text-right text-slate-500",
-                                                children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["formatRupiah"])(v.cost)
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 158,
-                                                columnNumber: 41
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                className: "px-6 py-4 text-right font-bold text-slate-800",
-                                                children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["formatRupiah"])(v.price)
-                                            }, void 0, false, {
-                                                fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 159,
-                                                columnNumber: 41
-                                            }, this),
-                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                className: "px-6 py-4 text-center",
-                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
-                                                    className: `px-2 py-1 rounded-full text-[10px] font-bold uppercase ${v.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`,
-                                                    children: v.status
-                                                }, void 0, false, {
-                                                    fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 161,
+                                                    lineNumber: 127,
                                                     columnNumber: 45
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 160,
+                                                lineNumber: 126,
                                                 columnNumber: 41
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
-                                                className: "px-6 py-4 text-right space-x-2",
-                                                children: [
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                                        onClick: ()=>openModal(v),
-                                                        className: "text-blue-600 hover:text-blue-800 font-bold",
-                                                        children: "Edit"
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 166,
-                                                        columnNumber: 45
-                                                    }, this),
-                                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                                        onClick: ()=>deleteVariant(v.id),
-                                                        className: "text-red-400 hover:text-red-600 font-bold",
-                                                        children: "Del"
-                                                    }, void 0, false, {
-                                                        fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 167,
-                                                        columnNumber: 45
-                                                    }, this)
-                                                ]
-                                            }, void 0, true, {
+                                                className: "text-right text-gray-500 text-xs",
+                                                children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["formatRupiah"])(v.cost)
+                                            }, void 0, false, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 165,
+                                                lineNumber: 132,
+                                                columnNumber: 41
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                className: "text-right font-semibold text-gray-900 text-xs",
+                                                children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["formatRupiah"])(v.price)
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/variants/page.js",
+                                                lineNumber: 133,
+                                                columnNumber: 41
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                className: "text-center",
+                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                    className: `badge ${v.status === 'active' ? 'badge-success' : 'badge-neutral'}`,
+                                                    children: v.status
+                                                }, void 0, false, {
+                                                    fileName: "[project]/app/variants/page.js",
+                                                    lineNumber: 135,
+                                                    columnNumber: 45
+                                                }, this)
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/variants/page.js",
+                                                lineNumber: 134,
+                                                columnNumber: 41
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
+                                                className: "text-right pr-6",
+                                                children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                                    className: "flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity",
+                                                    children: [
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                            onClick: ()=>openModal(v),
+                                                            className: "text-xs font-bold text-brand-600 hover:text-brand-800 px-2 py-1 rounded hover:bg-brand-50",
+                                                            children: "Edit"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/variants/page.js",
+                                                            lineNumber: 139,
+                                                            columnNumber: 49
+                                                        }, this),
+                                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                                            onClick: ()=>deleteVariant(v.id),
+                                                            className: "text-xs font-bold text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50",
+                                                            children: "Del"
+                                                        }, void 0, false, {
+                                                            fileName: "[project]/app/variants/page.js",
+                                                            lineNumber: 140,
+                                                            columnNumber: 49
+                                                        }, this)
+                                                    ]
+                                                }, void 0, true, {
+                                                    fileName: "[project]/app/variants/page.js",
+                                                    lineNumber: 138,
+                                                    columnNumber: 45
+                                                }, this)
+                                            }, void 0, false, {
+                                                fileName: "[project]/app/variants/page.js",
+                                                lineNumber: 137,
                                                 columnNumber: 41
                                             }, this)
                                         ]
                                     }, v.id, true, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 154,
+                                        lineNumber: 123,
                                         columnNumber: 37
                                     }, this);
                                 })
                             }, void 0, false, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 150,
+                                lineNumber: 119,
                                 columnNumber: 25
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/variants/page.js",
-                        lineNumber: 138,
+                        lineNumber: 107,
                         columnNumber: 21
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/app/variants/page.js",
-                    lineNumber: 137,
+                    lineNumber: 106,
                     columnNumber: 17
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/variants/page.js",
-                lineNumber: 136,
+                lineNumber: 105,
                 columnNumber: 13
             }, this),
             modalOpen && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4",
+                className: "fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4",
                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                    className: "bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-8 overflow-y-auto max-h-[90vh]",
+                    className: "bg-white rounded-2xl shadow-xl border border-gray-100 max-w-2xl w-full p-6 fade-in-up overflow-y-auto max-h-[90vh]",
                     children: [
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                            className: "text-xl font-bold mb-6 text-slate-800",
+                            className: "text-lg font-semibold text-gray-900 mb-6",
                             children: formData.id ? 'Edit SKU' : 'New SKU'
                         }, void 0, false, {
                             fileName: "[project]/app/variants/page.js",
-                            lineNumber: 181,
+                            lineNumber: 155,
                             columnNumber: 25
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("form", {
@@ -509,19 +531,19 @@ function VariantsPage() {
                             className: "space-y-5",
                             children: [
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "bg-blue-50 p-4 rounded-lg border border-blue-100",
+                                    className: "bg-brand-25 p-4 rounded-xl border border-brand-100",
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                            className: "block text-sm font-bold text-blue-800 mb-2",
-                                            children: "1. Select Parent Product"
+                                            className: "block text-xs font-bold text-brand-800 uppercase mb-1",
+                                            children: "Parent Product"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 185,
+                                            lineNumber: 159,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
                                             required: true,
-                                            className: "w-full border-blue-200 rounded-lg p-2.5 text-sm focus:ring-blue-500",
+                                            className: "select-field bg-white",
                                             value: formData.product_id,
                                             onChange: handleParentChange,
                                             children: [
@@ -530,7 +552,7 @@ function VariantsPage() {
                                                     children: "-- Select Model --"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 187,
+                                                    lineNumber: 161,
                                                     columnNumber: 37
                                                 }, this),
                                                 products.map((p)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -543,30 +565,37 @@ function VariantsPage() {
                                                         ]
                                                     }, p.id, true, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 188,
+                                                        lineNumber: 162,
                                                         columnNumber: 56
                                                     }, this))
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 186,
+                                            lineNumber: 160,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                            className: "text-xs text-blue-600 mt-2 font-mono",
+                                            className: "text-xs text-brand-600 mt-2 font-mono flex items-center gap-2",
                                             children: [
                                                 "Base SKU: ",
-                                                selectedBaseSku
+                                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                    className: "font-bold bg-white px-2 py-0.5 rounded border border-brand-200",
+                                                    children: selectedBaseSku
+                                                }, void 0, false, {
+                                                    fileName: "[project]/app/variants/page.js",
+                                                    lineNumber: 165,
+                                                    columnNumber: 47
+                                                }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 190,
+                                            lineNumber: 164,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 184,
+                                    lineNumber: 158,
                                     columnNumber: 29
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -575,16 +604,15 @@ function VariantsPage() {
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1",
+                                                    className: "block text-xs font-medium text-gray-700 mb-1",
                                                     children: "Color"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 195,
-                                                    columnNumber: 37
+                                                    lineNumber: 170,
+                                                    columnNumber: 38
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                                                    type: "text",
-                                                    className: "w-full border p-2 rounded",
+                                                    className: "input-field",
                                                     value: formData.color,
                                                     onChange: (e)=>setFormData({
                                                             ...formData,
@@ -593,28 +621,27 @@ function VariantsPage() {
                                                     placeholder: "Black"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 196,
-                                                    columnNumber: 37
+                                                    lineNumber: 170,
+                                                    columnNumber: 115
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 194,
+                                            lineNumber: 170,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1",
+                                                    className: "block text-xs font-medium text-gray-700 mb-1",
                                                     children: "Size"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 199,
-                                                    columnNumber: 37
+                                                    lineNumber: 171,
+                                                    columnNumber: 38
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                                                    type: "text",
-                                                    className: "w-full border p-2 rounded",
+                                                    className: "input-field",
                                                     value: formData.size,
                                                     onChange: (e)=>setFormData({
                                                             ...formData,
@@ -623,28 +650,28 @@ function VariantsPage() {
                                                     placeholder: "XL"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 200,
-                                                    columnNumber: 37
+                                                    lineNumber: 171,
+                                                    columnNumber: 114
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 198,
+                                            lineNumber: 171,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1",
-                                                    children: "Weight (gr)"
+                                                    className: "block text-xs font-medium text-gray-700 mb-1",
+                                                    children: "Weight (g)"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 203,
-                                                    columnNumber: 37
+                                                    lineNumber: 172,
+                                                    columnNumber: 38
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                                     type: "number",
-                                                    className: "w-full border p-2 rounded",
+                                                    className: "input-field",
                                                     value: formData.weight,
                                                     onChange: (e)=>setFormData({
                                                             ...formData,
@@ -652,32 +679,32 @@ function VariantsPage() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 204,
-                                                    columnNumber: 37
+                                                    lineNumber: 172,
+                                                    columnNumber: 120
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 202,
+                                            lineNumber: 172,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 193,
+                                    lineNumber: 169,
                                     columnNumber: 29
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "grid grid-cols-2 gap-4",
+                                    className: "grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100",
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1",
+                                                    className: "block text-xs font-bold text-gray-500 mb-1",
                                                     children: "Final SKU"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 210,
+                                                    lineNumber: 177,
                                                     columnNumber: 37
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -685,7 +712,7 @@ function VariantsPage() {
                                                     children: [
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                                             required: true,
-                                                            className: "w-full border p-2 rounded font-mono uppercase bg-slate-50",
+                                                            className: "input-field font-mono uppercase bg-white",
                                                             value: formData.sku,
                                                             onChange: (e)=>setFormData({
                                                                     ...formData,
@@ -693,43 +720,43 @@ function VariantsPage() {
                                                                 })
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/variants/page.js",
-                                                            lineNumber: 212,
+                                                            lineNumber: 179,
                                                             columnNumber: 41
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                                             type: "button",
                                                             onClick: generateSku,
-                                                            className: "bg-slate-200 px-3 rounded text-xs font-bold hover:bg-slate-300",
+                                                            className: "px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50",
                                                             children: "Auto"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/variants/page.js",
-                                                            lineNumber: 213,
+                                                            lineNumber: 180,
                                                             columnNumber: 41
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 211,
+                                                    lineNumber: 178,
                                                     columnNumber: 37
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 209,
+                                            lineNumber: 176,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1",
+                                                    className: "block text-xs font-bold text-gray-500 mb-1",
                                                     children: "Barcode"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 217,
+                                                    lineNumber: 184,
                                                     columnNumber: 37
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
-                                                    className: "w-full border p-2 rounded font-mono",
+                                                    className: "input-field bg-white",
                                                     value: formData.barcode,
                                                     onChange: (e)=>setFormData({
                                                             ...formData,
@@ -738,38 +765,38 @@ function VariantsPage() {
                                                     placeholder: "Scan..."
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 218,
+                                                    lineNumber: 185,
                                                     columnNumber: 37
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 216,
+                                            lineNumber: 183,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 208,
+                                    lineNumber: 175,
                                     columnNumber: 29
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "grid grid-cols-3 gap-4 pt-2",
+                                    className: "grid grid-cols-3 gap-4",
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1",
+                                                    className: "block text-xs font-medium text-gray-700 mb-1",
                                                     children: "HPP (Cost)"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 224,
-                                                    columnNumber: 37
+                                                    lineNumber: 190,
+                                                    columnNumber: 38
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                                     type: "number",
                                                     required: true,
-                                                    className: "w-full border p-2 rounded",
+                                                    className: "input-field",
                                                     value: formData.cost,
                                                     onChange: (e)=>setFormData({
                                                             ...formData,
@@ -777,29 +804,29 @@ function VariantsPage() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 225,
-                                                    columnNumber: 37
+                                                    lineNumber: 190,
+                                                    columnNumber: 120
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 223,
+                                            lineNumber: 190,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1 text-blue-600",
+                                                    className: "block text-xs font-bold text-brand-600 mb-1",
                                                     children: "Sell Price"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 228,
-                                                    columnNumber: 37
+                                                    lineNumber: 191,
+                                                    columnNumber: 38
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
                                                     type: "number",
                                                     required: true,
-                                                    className: "w-full border p-2 rounded font-bold",
+                                                    className: "input-field font-bold text-brand-700 bg-brand-50/30",
                                                     value: formData.price,
                                                     onChange: (e)=>setFormData({
                                                             ...formData,
@@ -807,27 +834,27 @@ function VariantsPage() {
                                                         })
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 229,
-                                                    columnNumber: 37
+                                                    lineNumber: 191,
+                                                    columnNumber: 119
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 227,
+                                            lineNumber: 191,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                             children: [
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
-                                                    className: "block text-sm font-bold mb-1",
+                                                    className: "block text-xs font-medium text-gray-700 mb-1",
                                                     children: "Status"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 232,
+                                                    lineNumber: 193,
                                                     columnNumber: 37
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
-                                                    className: "w-full border p-2 rounded",
+                                                    className: "select-field",
                                                     value: formData.status,
                                                     onChange: (e)=>setFormData({
                                                             ...formData,
@@ -839,7 +866,7 @@ function VariantsPage() {
                                                             children: "Active"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/variants/page.js",
-                                                            lineNumber: 234,
+                                                            lineNumber: 195,
                                                             columnNumber: 41
                                                         }, this),
                                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -847,76 +874,105 @@ function VariantsPage() {
                                                             children: "Inactive"
                                                         }, void 0, false, {
                                                             fileName: "[project]/app/variants/page.js",
-                                                            lineNumber: 235,
+                                                            lineNumber: 196,
                                                             columnNumber: 41
                                                         }, this)
                                                     ]
                                                 }, void 0, true, {
                                                     fileName: "[project]/app/variants/page.js",
-                                                    lineNumber: 233,
+                                                    lineNumber: 194,
                                                     columnNumber: 37
                                                 }, this)
                                             ]
                                         }, void 0, true, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 231,
+                                            lineNumber: 192,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 222,
+                                    lineNumber: 189,
                                     columnNumber: 29
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                    className: "flex justify-end gap-3 pt-4 border-t",
+                                    children: [
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("label", {
+                                            className: "block text-sm font-bold mb-1",
+                                            children: "Min. Stock"
+                                        }, void 0, false, {
+                                            fileName: "[project]/app/variants/page.js",
+                                            lineNumber: 202,
+                                            columnNumber: 33
+                                        }, this),
+                                        /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
+                                            type: "number",
+                                            className: "w-full border p-2 rounded",
+                                            value: formData.min_stock || 0,
+                                            onChange: (e)=>setFormData({
+                                                    ...formData,
+                                                    min_stock: e.target.value
+                                                })
+                                        }, void 0, false, {
+                                            fileName: "[project]/app/variants/page.js",
+                                            lineNumber: 203,
+                                            columnNumber: 33
+                                        }, this)
+                                    ]
+                                }, void 0, true, {
+                                    fileName: "[project]/app/variants/page.js",
+                                    lineNumber: 201,
+                                    columnNumber: 29
+                                }, this),
+                                /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                    className: "flex justify-end gap-3 pt-4 border-t border-gray-100 mt-2",
                                     children: [
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                             type: "button",
                                             onClick: ()=>setModalOpen(false),
-                                            className: "px-4 py-2 text-slate-600 hover:bg-slate-100 rounded font-bold",
+                                            className: "btn-ghost",
                                             children: "Cancel"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 241,
+                                            lineNumber: 212,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                                             type: "submit",
-                                            className: "px-5 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg",
+                                            className: "btn-primary",
                                             children: "Save SKU"
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 242,
+                                            lineNumber: 213,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, void 0, true, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 240,
+                                    lineNumber: 211,
                                     columnNumber: 29
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/variants/page.js",
-                            lineNumber: 182,
+                            lineNumber: 156,
                             columnNumber: 25
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/variants/page.js",
-                    lineNumber: 180,
+                    lineNumber: 154,
                     columnNumber: 21
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/variants/page.js",
-                lineNumber: 179,
+                lineNumber: 153,
                 columnNumber: 17
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/variants/page.js",
-        lineNumber: 116,
+        lineNumber: 80,
         columnNumber: 9
     }, this);
 }

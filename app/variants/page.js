@@ -12,13 +12,9 @@ export default function VariantsPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
     const [searchTerm, setSearchTerm] = useState('');
-    
-    // State untuk Base SKU display di modal
     const [selectedBaseSku, setSelectedBaseSku] = useState('-');
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    useEffect(() => { fetchData(); }, []);
 
     const fetchData = async () => {
         try {
@@ -26,13 +22,9 @@ export default function VariantsPage() {
                 getDocs(query(collection(db, "products"), orderBy("name", "asc"))),
                 getDocs(query(collection(db, "product_variants"), orderBy("sku", "asc")))
             ]);
-
-            const prodsData = []; 
-            snapProd.forEach(d => prodsData.push({id: d.id, ...d.data()}));
+            const prodsData = []; snapProd.forEach(d => prodsData.push({id: d.id, ...d.data()}));
             setProducts(prodsData);
-
-            const varsData = [];
-            snapVar.forEach(d => varsData.push({id: d.id, ...d.data()}));
+            const varsData = []; snapVar.forEach(d => varsData.push({id: d.id, ...d.data()}));
             setVariants(varsData);
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
@@ -45,10 +37,7 @@ export default function VariantsPage() {
     };
 
     const generateSku = () => {
-        if (selectedBaseSku === '-' || !formData.color || !formData.size) {
-            alert("Pilih Produk Induk, Warna, dan Ukuran dulu!");
-            return;
-        }
+        if (selectedBaseSku === '-' || !formData.color || !formData.size) return alert("Please select parent product, color and size first.");
         const colorClean = formData.color.trim().toUpperCase().replace(/\s+/g, '-');
         const sizeClean = formData.size.trim().toUpperCase().replace(/\s+/g, '-');
         const newSku = `${selectedBaseSku}-${colorClean}-${sizeClean}`;
@@ -61,10 +50,7 @@ export default function VariantsPage() {
             setFormData({ ...v });
             setSelectedBaseSku(prod ? prod.base_sku : '-');
         } else {
-            setFormData({ 
-                product_id: '', sku: '', barcode: '', color: '', size: '', 
-                weight: 0, cost: 0, price: 0, min_stock: 5, status: 'active' 
-            });
+            setFormData({ product_id: '', sku: '', barcode: '', color: '', size: '', weight: 0, cost: 0, price: 0, min_stock: 5, status: 'active' });
             setSelectedBaseSku('-');
         }
         setModalOpen(true);
@@ -73,98 +59,86 @@ export default function VariantsPage() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const payload = {
-                product_id: formData.product_id,
-                sku: formData.sku.toUpperCase(),
-                barcode: formData.barcode ? formData.barcode.toUpperCase() : formData.sku.toUpperCase(),
-                color: formData.color.toUpperCase(),
-                size: formData.size.toUpperCase(),
-                weight: Number(formData.weight) || 0,
-                cost: Number(formData.cost) || 0,
-                price: Number(formData.price) || 0,
-                min_stock: Number(formData.min_stock) || 5,
-                status: formData.status,
-                updated_at: serverTimestamp()
-            };
-
-            if (formData.id) {
-                await updateDoc(doc(db, "product_variants", formData.id), payload);
-            } else {
-                payload.created_at = serverTimestamp();
-                await addDoc(collection(db, "product_variants"), payload);
-            }
-            setModalOpen(false);
-            fetchData();
+            const payload = { ...formData, updated_at: serverTimestamp() };
+            if (formData.id) await updateDoc(doc(db, "product_variants", formData.id), payload);
+            else { payload.created_at = serverTimestamp(); await addDoc(collection(db, "product_variants"), payload); }
+            setModalOpen(false); fetchData();
         } catch (err) { alert(err.message); }
     };
 
     const deleteVariant = async (id) => {
-        if(confirm("Hapus SKU ini?")) {
-            await deleteDoc(doc(db, "product_variants", id));
-            fetchData();
-        }
+        if(confirm("Delete this SKU?")) { await deleteDoc(doc(db, "product_variants", id)); fetchData(); }
     };
 
-    // Filtering Logic
     const filteredVariants = variants.filter(v => {
-        const pName = products.find(p => p.id === v.product_id)?.name.toLowerCase() || '';
         const term = searchTerm.toLowerCase();
-        return v.sku.toLowerCase().includes(term) || pName.includes(term) || (v.barcode && v.barcode.toLowerCase().includes(term));
+        const pName = products.find(p => p.id === v.product_id)?.name.toLowerCase() || '';
+        return v.sku.toLowerCase().includes(term) || pName.includes(term);
     }).sort(sortBySize);
 
     return (
-        <div className="space-y-8 max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="max-w-7xl mx-auto space-y-6 fade-in pb-20">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Master SKU</h2>
-                    <p className="text-sm text-slate-500 mt-1">Manage variants, prices & barcodes.</p>
+                    <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">Variants (SKU)</h2>
+                    <p className="text-sm text-gray-500 mt-1">Manage individual stock keeping units.</p>
                 </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    <input 
-                        type="text" 
-                        placeholder="Search SKU / Name..." 
-                        className="border border-slate-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
-                    <button onClick={() => openModal()} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all whitespace-nowrap">
-                        + Add SKU
+                <div className="flex gap-3 w-full sm:w-auto">
+                    <div className="relative flex-1 sm:w-64">
+                        <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <input 
+                            type="text" 
+                            placeholder="Search SKU..." 
+                            className="w-full pl-10 pr-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-100 focus:border-brand-500 outline-none shadow-sm"
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                        />
+                    </div>
+                    <button onClick={() => openModal()} className="btn-primary whitespace-nowrap">
+                        Add SKU
                     </button>
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-100 text-sm">
-                        <thead className="bg-slate-50">
+            {/* Table */}
+            <div className="card p-0 overflow-hidden">
+                <div className="table-wrapper border-0 shadow-none rounded-none">
+                    <table className="table-modern">
+                        <thead>
                             <tr>
-                                <th className="px-6 py-4 text-left font-bold text-slate-500 uppercase">SKU Final</th>
-                                <th className="px-6 py-4 text-left font-bold text-slate-500 uppercase">Parent Product</th>
-                                <th className="px-6 py-4 text-left font-bold text-slate-500 uppercase">Variant</th>
-                                <th className="px-6 py-4 text-right font-bold text-slate-500 uppercase">HPP</th>
-                                <th className="px-6 py-4 text-right font-bold text-slate-500 uppercase">Price</th>
-                                <th className="px-6 py-4 text-center font-bold text-slate-500 uppercase">Status</th>
-                                <th className="px-6 py-4 text-right font-bold text-slate-500 uppercase">Actions</th>
+                                <th className="pl-6">SKU Final</th>
+                                <th>Parent Product</th>
+                                <th>Variant Spec</th>
+                                <th className="text-right">HPP</th>
+                                <th className="text-right">Price</th>
+                                <th className="text-center">Status</th>
+                                <th className="text-right pr-6">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-slate-50">
-                            {loading ? <tr><td colSpan="7" className="text-center py-10">Loading...</td></tr> : filteredVariants.map(v => {
+                        <tbody>
+                            {loading ? <tr><td colSpan="7" className="text-center py-12 text-gray-400">Loading...</td></tr> : filteredVariants.map(v => {
                                 const parent = products.find(p => p.id === v.product_id);
                                 return (
-                                    <tr key={v.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 font-mono font-bold text-blue-600">{v.sku}</td>
-                                        <td className="px-6 py-4 font-medium text-slate-700">{parent ? parent.name : <span className="text-red-400">Deleted Parent</span>}</td>
-                                        <td className="px-6 py-4"><span className="bg-slate-100 px-2 py-1 rounded border">{v.color} / {v.size}</span></td>
-                                        <td className="px-6 py-4 text-right text-slate-500">{formatRupiah(v.cost)}</td>
-                                        <td className="px-6 py-4 text-right font-bold text-slate-800">{formatRupiah(v.price)}</td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${v.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                                {v.status}
-                                            </span>
+                                    <tr key={v.id} className="group">
+                                        <td className="pl-6 font-mono text-xs font-bold text-brand-600 bg-brand-50/30 w-fit rounded-r">{v.sku}</td>
+                                        <td className="font-medium text-gray-700">{parent?.name || '-'}</td>
+                                        <td>
+                                            <div className="flex gap-2">
+                                                <span className="badge badge-neutral">{v.color}</span>
+                                                <span className="badge badge-neutral">{v.size}</span>
+                                            </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right space-x-2">
-                                            <button onClick={() => openModal(v)} className="text-blue-600 hover:text-blue-800 font-bold">Edit</button>
-                                            <button onClick={() => deleteVariant(v.id)} className="text-red-400 hover:text-red-600 font-bold">Del</button>
+                                        <td className="text-right text-gray-500 text-xs">{formatRupiah(v.cost)}</td>
+                                        <td className="text-right font-semibold text-gray-900 text-xs">{formatRupiah(v.price)}</td>
+                                        <td className="text-center">
+                                            <span className={`badge ${v.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>{v.status}</span>
+                                        </td>
+                                        <td className="text-right pr-6">
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => openModal(v)} className="text-xs font-bold text-brand-600 hover:text-brand-800 px-2 py-1 rounded hover:bg-brand-50">Edit</button>
+                                                <button onClick={() => deleteVariant(v.id)} className="text-xs font-bold text-red-600 hover:text-red-800 px-2 py-1 rounded hover:bg-red-50">Del</button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -174,72 +148,69 @@ export default function VariantsPage() {
                 </div>
             </div>
 
-            {/* MODAL */}
+            {/* Modal */}
             {modalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-8 overflow-y-auto max-h-[90vh]">
-                        <h3 className="text-xl font-bold mb-6 text-slate-800">{formData.id ? 'Edit SKU' : 'New SKU'}</h3>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-2xl w-full p-6 fade-in-up overflow-y-auto max-h-[90vh]">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-6">{formData.id ? 'Edit SKU' : 'New SKU'}</h3>
                         <form onSubmit={handleSubmit} className="space-y-5">
                             
-                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                <label className="block text-sm font-bold text-blue-800 mb-2">1. Select Parent Product</label>
-                                <select required className="w-full border-blue-200 rounded-lg p-2.5 text-sm focus:ring-blue-500" value={formData.product_id} onChange={handleParentChange}>
+                            <div className="bg-brand-25 p-4 rounded-xl border border-brand-100">
+                                <label className="block text-xs font-bold text-brand-800 uppercase mb-1">Parent Product</label>
+                                <select required className="select-field bg-white" value={formData.product_id} onChange={handleParentChange}>
                                     <option value="">-- Select Model --</option>
                                     {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.base_sku})</option>)}
                                 </select>
-                                <div className="text-xs text-blue-600 mt-2 font-mono">Base SKU: {selectedBaseSku}</div>
+                                <div className="text-xs text-brand-600 mt-2 font-mono flex items-center gap-2">
+                                    Base SKU: <span className="font-bold bg-white px-2 py-0.5 rounded border border-brand-200">{selectedBaseSku}</span>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-bold mb-1">Color</label>
-                                    <input type="text" className="w-full border p-2 rounded" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} placeholder="Black" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold mb-1">Size</label>
-                                    <input type="text" className="w-full border p-2 rounded" value={formData.size} onChange={e => setFormData({...formData, size: e.target.value})} placeholder="XL" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold mb-1">Weight (gr)</label>
-                                    <input type="number" className="w-full border p-2 rounded" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} />
-                                </div>
+                                <div><label className="block text-xs font-medium text-gray-700 mb-1">Color</label><input className="input-field" value={formData.color} onChange={e => setFormData({...formData, color: e.target.value})} placeholder="Black" /></div>
+                                <div><label className="block text-xs font-medium text-gray-700 mb-1">Size</label><input className="input-field" value={formData.size} onChange={e => setFormData({...formData, size: e.target.value})} placeholder="XL" /></div>
+                                <div><label className="block text-xs font-medium text-gray-700 mb-1">Weight (g)</label><input type="number" className="input-field" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} /></div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
                                 <div>
-                                    <label className="block text-sm font-bold mb-1">Final SKU</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Final SKU</label>
                                     <div className="flex gap-2">
-                                        <input required className="w-full border p-2 rounded font-mono uppercase bg-slate-50" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} />
-                                        <button type="button" onClick={generateSku} className="bg-slate-200 px-3 rounded text-xs font-bold hover:bg-slate-300">Auto</button>
+                                        <input required className="input-field font-mono uppercase bg-white" value={formData.sku} onChange={e => setFormData({...formData, sku: e.target.value})} />
+                                        <button type="button" onClick={generateSku} className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50">Auto</button>
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-bold mb-1">Barcode</label>
-                                    <input className="w-full border p-2 rounded font-mono" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan..." />
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Barcode</label>
+                                    <input className="input-field bg-white" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} placeholder="Scan..." />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-4 pt-2">
+                            <div className="grid grid-cols-3 gap-4">
+                                <div><label className="block text-xs font-medium text-gray-700 mb-1">HPP (Cost)</label><input type="number" required className="input-field" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} /></div>
+                                <div><label className="block text-xs font-bold text-brand-600 mb-1">Sell Price</label><input type="number" required className="input-field font-bold text-brand-700 bg-brand-50/30" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} /></div>
                                 <div>
-                                    <label className="block text-sm font-bold mb-1">HPP (Cost)</label>
-                                    <input type="number" required className="w-full border p-2 rounded" value={formData.cost} onChange={e => setFormData({...formData, cost: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold mb-1 text-blue-600">Sell Price</label>
-                                    <input type="number" required className="w-full border p-2 rounded font-bold" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-bold mb-1">Status</label>
-                                    <select className="w-full border p-2 rounded" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                                    <select className="select-field" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
                                         <option value="active">Active</option>
                                         <option value="inactive">Inactive</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-4 border-t">
-                                <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded font-bold">Cancel</button>
-                                <button type="submit" className="px-5 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg">Save SKU</button>
+                            <div>
+                                <label className="block text-sm font-bold mb-1">Min. Stock</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full border p-2 rounded" 
+                                    value={formData.min_stock || 0} 
+                                    onChange={e => setFormData({...formData, min_stock: e.target.value})} 
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 mt-2">
+                                <button type="button" onClick={() => setModalOpen(false)} className="btn-ghost">Cancel</button>
+                                <button type="submit" className="btn-primary">Save SKU</button>
                             </div>
                         </form>
                     </div>

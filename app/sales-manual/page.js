@@ -214,7 +214,7 @@ export default function PosPage() {
     const change = (parseInt(cashReceived) || 0) - cartTotal;
 
     return (
-        <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-100px)]">
+        <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-7rem)] fade-in">
             
             {/* LEFT: PRODUCT LIST */}
             <div className="w-full lg:w-2/3 flex flex-col gap-4 h-full">

@@ -42,65 +42,68 @@ export default function BrandsPage() {
     };
 
     return (
-        <div className="space-y-8 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+        <div className="max-w-5xl mx-auto space-y-6 fade-in">
+            <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Master Brands</h2>
-                    <p className="text-sm text-slate-500">Own brands & Supplier brands.</p>
+                    <h2 className="text-2xl font-bold text-gray-900">Master Brands</h2>
+                    <p className="text-sm text-gray-500">Manage your own brands and supplier brands.</p>
                 </div>
-                <button onClick={() => openModal()} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg transition-all">
-                    + Add Brand
+                <button onClick={() => openModal()} className="btn-primary">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
+                    Add Brand
                 </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <table className="min-w-full divide-y divide-slate-100">
-                    <thead className="bg-slate-50">
-                        <tr>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Brand Name</th>
-                            <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Type</th>
-                            <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-slate-50">
-                        {loading ? <tr><td colSpan="3" className="text-center py-8">Loading...</td></tr> : brands.map(b => (
-                            <tr key={b.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4 font-bold text-slate-800">{b.name}</td>
-                                <td className="px-6 py-4">
-                                    {b.type === 'own_brand' 
-                                        ? <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold border border-indigo-100">Own Brand</span>
-                                        : <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-xs font-bold border border-amber-100">Supplier</span>
-                                    }
-                                </td>
-                                <td className="px-6 py-4 text-right space-x-2">
-                                    <button onClick={() => openModal(b)} className="text-blue-600 hover:text-blue-800 font-bold text-sm">Edit</button>
-                                    <button onClick={() => deleteBrand(b.id)} className="text-red-400 hover:text-red-600 font-bold text-sm">Del</button>
-                                </td>
+            <div className="card p-0 overflow-hidden">
+                <div className="table-wrapper">
+                    <table className="table-modern">
+                        <thead>
+                            <tr>
+                                <th>Brand Name</th>
+                                <th>Type</th>
+                                <th className="text-right">Actions</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {loading ? <tr><td colSpan="3" className="text-center py-8 text-gray-400">Loading...</td></tr> : brands.map(b => (
+                                <tr key={b.id}>
+                                    <td className="font-semibold text-gray-900">{b.name}</td>
+                                    <td>
+                                        {b.type === 'own_brand' 
+                                            ? <span className="badge badge-brand">Own Brand</span>
+                                            : <span className="badge badge-warning">Supplier</span>
+                                        }
+                                    </td>
+                                    <td className="text-right space-x-2">
+                                        <button onClick={() => openModal(b)} className="text-xs font-bold text-brand-600 hover:text-brand-800">Edit</button>
+                                        <button onClick={() => deleteBrand(b.id)} className="text-xs font-bold text-red-600 hover:text-red-800">Del</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {modalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
-                        <h3 className="text-xl font-bold mb-6 text-slate-800">{formData.id ? 'Edit Brand' : 'New Brand'}</h3>
-                        <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 fade-in-up">
+                        <h3 className="text-lg font-bold text-gray-900 mb-6">{formData.id ? 'Edit Brand' : 'New Brand'}</h3>
+                        <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-bold mb-1">Brand Name</label>
-                                <input type="text" required className="w-full border p-2.5 rounded-lg" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Al Muslim" />
+                                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Brand Name</label>
+                                <input type="text" required className="input-field" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Al Muslim" />
                             </div>
                             <div>
-                                <label className="block text-sm font-bold mb-1">Type</label>
-                                <select className="w-full border p-2.5 rounded-lg" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
+                                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Type</label>
+                                <select className="select-field" value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
                                     <option value="own_brand">Own Brand (Internal)</option>
                                     <option value="supplier_brand">Supplier Brand</option>
                                 </select>
                             </div>
-                            <div className="flex justify-end gap-3 pt-4 border-t">
-                                <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded font-bold">Cancel</button>
-                                <button type="submit" className="px-5 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 shadow-lg">Save</button>
+                            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                                <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>
+                                <button type="submit" className="btn-primary">Save Brand</button>
                             </div>
                         </form>
                     </div>
