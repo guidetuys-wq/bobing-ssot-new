@@ -171,7 +171,7 @@ export default function Dashboard() {
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 class="font-bold text-slate-800">Top 10 Produk Terlaris</h3>
+                    <h3 className="font-bold text-slate-800">Top 10 Produk Terlaris</h3>
                 </div>
                 <table className="min-w-full divide-y divide-slate-100">
                     <thead className="bg-slate-50">
