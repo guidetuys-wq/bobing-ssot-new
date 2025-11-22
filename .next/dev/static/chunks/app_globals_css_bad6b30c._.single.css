@@ -1,9 +1,9 @@
 /* [project]/app/globals.css [app-client] (css) */
-body {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-family: Inter, sans-serif;
-}
+@tailwind base;
+
+@tailwind components;
+
+@tailwind utilities;
 
 ::-webkit-scrollbar {
   width: 6px;
@@ -14,30 +14,14 @@ body {
   background: none;
 }
 
-::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  background-clip: content-box;
-  border: 2px solid #0000;
-  border-radius: 10px;
-}
+@apply bg-slate-300 rounded-full hover:bg-slate-400 transition-colors;
 
-::-webkit-scrollbar-thumb:hover {
-  background-color: #94a3b8;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+@apply bg-slate-50 text-slate-800 antialiased selection:bg-indigo-100 selection:text-indigo-700;
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(5px);
+    transform: translateY(10px);
   }
 
   to {
@@ -47,90 +31,17 @@ body {
 }
 
 .fade-in {
-  animation: .3s ease-out forwards fadeIn;
+  animation: .4s cubic-bezier(.16, 1, .3, 1) forwards fadeIn;
 }
 
-@keyframes pulse-soft {
-  0%, 100% {
-    opacity: 1;
-  }
+@apply bg-white / 80 backdrop-blur-md border-b border-slate-200 / 60;
 
-  50% {
-    opacity: .7;
-  }
-}
+@apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:border-indigo-200;
 
-.animate-pulse-soft {
-  animation: 2s cubic-bezier(.4, 0, .6, 1) infinite pulse-soft;
-}
+@apply px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider bg-slate-50 / 50 border-b border-slate-200;
 
-@apply px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border;
+@apply px-6 py-4 text-sm text-slate-700 border-b border-slate-50 transition-colors;
 
-@apply bg-emerald-50 text-emerald-700 border-emerald-100;
-
-@apply bg-amber-50 text-amber-700 border-amber-100;
-
-@apply bg-rose-50 text-rose-700 border-rose-100;
-
-@apply bg-slate-100 text-slate-600 border-slate-200;
-
-#toast-container {
-  z-index: 100;
-  flex-direction: column;
-  gap: 10px;
-  display: flex;
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-}
-
-.toast {
-  background: #fff;
-  border-left: 4px solid;
-  border-radius: 8px;
-  justify-content: space-between;
-  align-items: center;
-  min-width: 250px;
-  padding: 12px 16px;
-  font-size: .875rem;
-  font-weight: 500;
-  animation: .3s ease-out forwards slideIn;
-  display: flex;
-  box-shadow: 0 4px 12px #0000001a;
-}
-
-.toast-success {
-  color: #065f46;
-  border-color: #10b981;
-}
-
-.toast-error {
-  color: #991b1b;
-  border-color: #ef4444;
-}
-
-.toast-info {
-  color: #1e40af;
-  border-color: #3b82f6;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideOut {
-  to {
-    opacity: 0;
-    transform: translateX(100%);
-  }
-}
+@apply bg-indigo-50 / 30;
 
 /*# sourceMappingURL=app_globals_css_bad6b30c._.single.css.map*/
