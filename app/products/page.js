@@ -122,7 +122,6 @@ export default function ProductsPage() {
                             <div><label className="text-xs font-bold text-lumina-muted">Name</label><input className="input-luxury mt-1" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})}/></div>
                             <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-lumina-muted">Category</label><select className="input-luxury mt-1" value={formData.category} onChange={e=>setFormData({...formData, category:e.target.value})}>{categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></div><div><label className="text-xs font-bold text-lumina-muted">Status</label><select className="input-luxury mt-1" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}><option value="active">Active</option><option value="inactive">Inactive</option></select></div></div>
                         </div>
-                        <div className="p-6 border-t border-lumina-border bg-lumina-base rounded-b-2xl flex justify-end gap-3"><button onClick={()=>setModalOpen(false)} className="btn-ghost-dark">Cancel</button><button onClick={handleSubmit} className="btn-gold w-32" disabled={uploading}>{uploading?'...':'Save'}</button></div>
                     </div>
                 </div>
             )}
