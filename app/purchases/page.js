@@ -15,7 +15,6 @@ export default function PurchasesPage() {
     const [detailOpen, setDetailOpen] = useState(false);
     const [selectedPO, setSelectedPO] = useState(null);
     
-    // Master Data & Form
     const [warehouses, setWarehouses] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [products, setProducts] = useState([]);
@@ -37,29 +36,24 @@ export default function PurchasesPage() {
     };
 
     const fetchMasterData = async () => {
-        // ... (Logika fetch sama, hanya UI yang berubah)
         const [sWh, sSupp, sProd, sVar] = await Promise.all([
             getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
             getDocs(query(collection(db, "suppliers"), orderBy("name"))),
             getDocs(collection(db, "products")),
             getDocs(query(collection(db, "product_variants"), orderBy("sku")))
         ]);
-        const wh = []; sWh.forEach(d => { if(d.data().type==='physical' || !d.data().type) wh.push({id:d.id, ...d.data()}) });
-        setWarehouses(wh);
-        const sup = []; sSupp.forEach(d => sup.push({id:d.id, ...d.data()}));
-        setSuppliers(sup);
-        const prod = []; sProd.forEach(d => prod.push({id:d.id, ...d.data()}));
-        setProducts(prod);
-        const vr = []; sVar.forEach(d => vr.push({id:d.id, ...d.data()}));
-        setVariants(vr);
+        const wh = []; sWh.forEach(d => { if(d.data().type==='physical' || !d.data().type) wh.push({id:d.id, ...d.data()}) }); setWarehouses(wh);
+        const sup = []; sSupp.forEach(d => sup.push({id:d.id, ...d.data()})); setSuppliers(sup);
+        const prod = []; sProd.forEach(d => prod.push({id:d.id, ...d.data()})); setProducts(prod);
+        const vr = []; sVar.forEach(d => vr.push({id:d.id, ...d.data()})); setVariants(vr);
     };
 
     const addItem = () => {
         const { variant_id, qty, cost } = inputItem;
-        if(!variant_id || !qty || !cost) return alert("Lengkapi data item");
+        if(!variant_id || !qty || !cost) return alert("Lengkapi data");
         const v = variants.find(x => x.id === variant_id);
         const p = products.find(x => x.id === v.product_id);
-        setCart([...cart, { variant_id, sku: v.sku, name: p?.name || 'Unknown', spec: `${v.color}/${v.size}`, qty: parseInt(qty), unit_cost: parseInt(cost) }]);
+        setCart([...cart, { variant_id, sku: v.sku, name: p?.name, spec: `${v.color}/${v.size}`, qty: parseInt(qty), unit_cost: parseInt(cost) }]);
         setInputItem({ variant_id: '', qty: '', cost: '' });
     };
 
@@ -70,20 +64,14 @@ export default function PurchasesPage() {
             const totalAmount = cart.reduce((a,b) => a + (b.qty * b.unit_cost), 0);
             const totalQty = cart.reduce((a,b) => a + b.qty, 0);
             const supplierName = suppliers.find(s => s.id === formData.supplier_id)?.name;
-
             await runTransaction(db, async (t) => {
                 const poRef = doc(collection(db, "purchase_orders"));
-                t.set(poRef, {
-                    supplier_name: supplierName, warehouse_id: formData.warehouse_id, order_date: new Date(formData.date),
-                    status: 'received_full', total_amount: totalAmount, total_qty: totalQty, payment_status: formData.isPaid ? 'paid' : 'unpaid',
-                    created_at: serverTimestamp(), created_by: user?.email
-                });
-                for(const item of cart) {
-                    t.set(doc(collection(db, `purchase_orders/${poRef.id}/items`)), { variant_id: item.variant_id, qty: item.qty, unit_cost: item.unit_cost, subtotal: item.qty*item.unit_cost });
-                    t.set(doc(collection(db, "stock_movements")), { variant_id: item.variant_id, warehouse_id: formData.warehouse_id, type: 'purchase_in', qty: item.qty, unit_cost: item.unit_cost, ref_id: poRef.id, ref_type: 'purchase_order', date: serverTimestamp(), notes: `PO ${supplierName}` });
-                    const snapRef = doc(db, "stock_snapshots", `${item.variant_id}_${formData.warehouse_id}`);
-                    const snapDoc = await t.get(snapRef);
-                    if(snapDoc.exists()) t.update(snapRef, { qty: (snapDoc.data().qty||0) + item.qty }); else t.set(snapRef, { id: snapRef.id, variant_id: item.variant_id, warehouse_id: formData.warehouse_id, qty: item.qty });
+                t.set(poRef, { supplier_name: supplierName, warehouse_id: formData.warehouse_id, order_date: new Date(formData.date), status: 'received_full', total_amount: totalAmount, total_qty: totalQty, payment_status: formData.isPaid ? 'paid' : 'unpaid', created_at: serverTimestamp(), created_by: user?.email });
+                for(const i of cart) {
+                    t.set(doc(collection(db, `purchase_orders/${poRef.id}/items`)), { variant_id: i.variant_id, qty: i.qty, unit_cost: i.unit_cost, subtotal: i.qty*i.unit_cost });
+                    t.set(doc(collection(db, "stock_movements")), { variant_id: i.variant_id, warehouse_id: formData.warehouse_id, type: 'purchase_in', qty: i.qty, unit_cost: i.unit_cost, ref_id: poRef.id, ref_type: 'purchase_order', date: serverTimestamp(), notes: `PO ${supplierName}` });
+                    const sRef = doc(db, "stock_snapshots", `${i.variant_id}_${formData.warehouse_id}`); const sDoc = await t.get(sRef);
+                    if(sDoc.exists()) t.update(sRef, { qty: (sDoc.data().qty||0) + i.qty }); else t.set(sRef, { id: sRef.id, variant_id: i.variant_id, warehouse_id: formData.warehouse_id, qty: i.qty });
                 }
                 if(formData.isPaid) {
                     const cashRef = doc(collection(db, "cash_transactions"));
@@ -98,135 +86,19 @@ export default function PurchasesPage() {
         setSelectedPO(po); setDetailOpen(true);
         const itemsSnap = await getDocs(collection(db, `purchase_orders/${po.id}/items`));
         const items = []; 
-        itemsSnap.forEach(d => {
-            const i = d.data();
-            const v = variants.find(x => x.id === i.variant_id);
-            const p = v ? products.find(x => x.id === v.product_id) : null;
-            items.push({ ...i, name: p?.name, sku: v?.sku, spec: v ? `${v.color}/${v.size}` : '' });
-        });
+        itemsSnap.forEach(d => { const i = d.data(); const v = variants.find(x => x.id === i.variant_id); const p = v ? products.find(x => x.id === v.product_id) : null; items.push({ ...i, name: p?.name, sku: v?.sku }); });
         setPoItems(items);
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6 fade-in pb-20">
+        <div className="space-y-6 fade-in pb-20">
             <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Purchase Orders</h2>
-                    <p className="text-sm text-gray-500 mt-1">Manage supplier orders and stock intake.</p>
-                </div>
-                <div className="flex gap-2">
-                    <Link href="/purchases-import" className="btn-secondary">Import Excel</Link>
-                    <button onClick={() => { setFormData({supplier_id:'', warehouse_id:'', date: new Date().toISOString().split('T')[0], isPaid: false}); setCart([]); setModalOpen(true); }} className="btn-primary">New Purchase</button>
-                </div>
+                <div><h2 className="text-2xl font-bold text-lumina-text font-display">Purchase Orders</h2><p className="text-sm text-lumina-muted">Manage supplier orders.</p></div>
+                <div className="flex gap-2"><Link href="/purchases-import" className="btn-ghost-dark">Import</Link><button onClick={() => { setFormData({supplier_id:'', warehouse_id:'', date: new Date().toISOString().split('T')[0], isPaid: false}); setCart([]); setModalOpen(true); }} className="btn-gold">New PO</button></div>
             </div>
-
-            <div className="card p-0 overflow-hidden">
-                <div className="table-wrapper border-0 shadow-none rounded-none">
-                    <table className="table-modern">
-                        <thead><tr><th className="pl-6">Date</th><th>Supplier</th><th className="text-right">Total</th><th className="text-center">Payment</th><th className="text-right pr-6">Actions</th></tr></thead>
-                        <tbody>
-                            {loading ? <tr><td colSpan="5" className="text-center py-12 text-gray-400">Loading...</td></tr> : history.map(h => (
-                                <tr key={h.id}>
-                                    <td className="pl-6 font-mono text-gray-600 text-xs">{new Date(h.order_date.toDate()).toLocaleDateString()}</td>
-                                    <td className="font-semibold text-gray-800">{h.supplier_name}</td>
-                                    <td className="text-right font-bold text-gray-900">{formatRupiah(h.total_amount)}</td>
-                                    <td className="text-center">
-                                        <span className={`badge ${h.payment_status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{h.payment_status}</span>
-                                    </td>
-                                    <td className="text-right pr-6">
-                                        <button onClick={() => openDetail(h)} className="text-xs font-bold text-brand-600 hover:text-brand-800">Detail</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* MODAL FORM PO */}
-            {modalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full p-6 fade-in-up max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">New Purchase Order</h3>
-                        <form onSubmit={submitPO} className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4">
-                                <select required className="select-field" value={formData.supplier_id} onChange={e => setFormData({...formData, supplier_id: e.target.value})}>
-                                    <option value="">-- Supplier --</option>
-                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                </select>
-                                <select required className="select-field" value={formData.warehouse_id} onChange={e => setFormData({...formData, warehouse_id: e.target.value})}>
-                                    <option value="">-- Target Warehouse --</option>
-                                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                </select>
-                                <input type="date" required className="input-field" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
-                            </div>
-
-                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                                <div className="grid grid-cols-12 gap-2 items-end">
-                                    <div className="col-span-6">
-                                        <label className="text-xs font-bold text-gray-500 mb-1">Product SKU</label>
-                                        <select className="select-field" value={inputItem.variant_id} onChange={e => { const v = variants.find(x=>x.id===e.target.value); setInputItem({...inputItem, variant_id: e.target.value, cost: v?.cost || ''}) }}>
-                                            <option value="">-- Select Item --</option>
-                                            {variants.map(v => { const p = products.find(x=>x.id===v.product_id); return <option key={v.id} value={v.id}>{v.sku} - {p?.name} ({v.color}/{v.size})</option> })}
-                                        </select>
-                                    </div>
-                                    <div className="col-span-2"><label className="text-xs font-bold text-gray-500 mb-1">Qty</label><input type="number" className="input-field" value={inputItem.qty} onChange={e=>setInputItem({...inputItem, qty:e.target.value})} /></div>
-                                    <div className="col-span-3"><label className="text-xs font-bold text-gray-500 mb-1">Cost</label><input type="number" className="input-field" value={inputItem.cost} onChange={e=>setInputItem({...inputItem, cost:e.target.value})} /></div>
-                                    <div className="col-span-1"><button type="button" onClick={addItem} className="w-full bg-gray-800 text-white p-2.5 rounded-lg font-bold hover:bg-gray-700">+</button></div>
-                                </div>
-                            </div>
-
-                            <div className="overflow-hidden border border-gray-200 rounded-lg">
-                                <table className="min-w-full text-sm">
-                                    <thead className="bg-gray-50"><tr><th className="p-2 text-left">Item</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Subtotal</th></tr></thead>
-                                    <tbody>
-                                        {cart.map((c, idx) => (
-                                            <tr key={idx} className="border-b border-gray-50"><td className="p-2 font-medium">{c.name} <span className="text-xs text-gray-400 ml-1">{c.sku}</span></td><td className="p-2 text-right">{c.qty}</td><td className="p-2 text-right">{formatRupiah(c.qty*c.unit_cost)}</td></tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="flex items-center gap-2 bg-amber-50 p-3 rounded-lg border border-amber-100">
-                                <input type="checkbox" id="isPaid" checked={formData.isPaid} onChange={e => setFormData({...formData, isPaid: e.target.checked})} className="rounded text-amber-600 focus:ring-amber-500" />
-                                <label htmlFor="isPaid" className="text-sm font-bold text-amber-800 cursor-pointer">Paid in Full (Record Cash Out)</label>
-                            </div>
-
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button type="button" onClick={() => setModalOpen(false)} className="btn-ghost">Cancel</button>
-                                <button type="submit" className="btn-primary">Submit Order</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* MODAL DETAIL */}
-            {detailOpen && selectedPO && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 fade-in-up">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-gray-900">PO Details</h3>
-                            <button onClick={() => setDetailOpen(false)} className="text-gray-400">&times;</button>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex justify-between text-sm border-b border-gray-100 pb-3">
-                                <span className="text-gray-500">Supplier: <strong className="text-gray-900">{selectedPO.supplier_name}</strong></span>
-                                <span className="text-gray-500">Status: <strong className="text-gray-900 uppercase">{selectedPO.payment_status}</strong></span>
-                            </div>
-                            <table className="w-full text-sm">
-                                <thead className="bg-gray-50 text-gray-500"><tr><th className="p-2 text-left">Product</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Subtotal</th></tr></thead>
-                                <tbody>
-                                    {poItems.map((i, idx) => (
-                                        <tr key={idx} className="border-b border-gray-50"><td className="p-2">{i.name} <span className="text-xs text-gray-400 block">{i.sku}</span></td><td className="p-2 text-right">{i.qty}</td><td className="p-2 text-right font-medium">{formatRupiah(i.subtotal)}</td></tr>
-                                    ))}
-                                </tbody>
-                                <tfoot className="bg-gray-50 font-bold"><tr><td colSpan="2" className="p-2 text-right">Total Amount</td><td className="p-2 text-right text-brand-600">{formatRupiah(selectedPO.total_amount)}</td></tr></tfoot>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <div className="card-luxury overflow-hidden"><div className="table-wrapper-dark"><table className="table-dark"><thead><tr><th className="pl-6">Date</th><th>Supplier</th><th className="text-right">Total</th><th className="text-center">Status</th><th className="text-right pr-6">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan="5" className="p-8 text-center text-lumina-muted">Loading...</td></tr> : history.map(h => (<tr key={h.id}><td className="pl-6 font-mono text-xs text-lumina-muted">{new Date(h.order_date.toDate()).toLocaleDateString()}</td><td className="text-lumina-text font-medium">{h.supplier_name}</td><td className="text-right font-bold text-lumina-gold">{formatRupiah(h.total_amount)}</td><td className="text-center"><span className={`badge-luxury ${h.payment_status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{h.payment_status}</span></td><td className="text-right pr-6"><button onClick={() => openDetail(h)} className="text-xs font-bold text-lumina-muted hover:text-lumina-gold">Detail</button></td></tr>))}</tbody></table></div></div>
+            {/* Modal PO */}{modalOpen && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"><div className="card-luxury w-full max-w-4xl p-6 fade-in-up max-h-[90vh] overflow-y-auto"><h3 className="text-lg font-bold text-lumina-text mb-4">New Purchase Order</h3><form onSubmit={submitPO} className="space-y-4"><div className="grid grid-cols-3 gap-4"><select required className="input-luxury" value={formData.supplier_id} onChange={e => setFormData({...formData, supplier_id: e.target.value})}><option value="">-- Supplier --</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select><select required className="input-luxury" value={formData.warehouse_id} onChange={e => setFormData({...formData, warehouse_id: e.target.value})}><option value="">-- Warehouse --</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select><input type="date" required className="input-luxury" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} /></div><div className="bg-lumina-base p-4 rounded-xl border border-lumina-border"><div className="grid grid-cols-12 gap-3 items-end"><div className="col-span-6"><label className="text-xs font-bold text-lumina-muted mb-1 block">Item</label><select className="input-luxury" value={inputItem.variant_id} onChange={e => { const v = variants.find(x=>x.id===e.target.value); setInputItem({...inputItem, variant_id: e.target.value, cost: v?.cost || ''}) }}><option value="">Select</option>{variants.map(v => { const p = products.find(x=>x.id===v.product_id); return <option key={v.id} value={v.id}>{v.sku} - {p?.name} ({v.color}/{v.size})</option> })}</select></div><div className="col-span-2"><label className="text-xs font-bold text-lumina-muted mb-1 block">Qty</label><input type="number" className="input-luxury" value={inputItem.qty} onChange={e=>setInputItem({...inputItem, qty:e.target.value})} /></div><div className="col-span-3"><label className="text-xs font-bold text-lumina-muted mb-1 block">Cost</label><input type="number" className="input-luxury" value={inputItem.cost} onChange={e=>setInputItem({...inputItem, cost:e.target.value})} /></div><div className="col-span-1"><button type="button" onClick={addItem} className="btn-gold w-full p-2.5">+</button></div></div></div><div className="border border-lumina-border rounded-lg overflow-hidden"><table className="w-full text-sm text-left text-lumina-text"><thead className="bg-lumina-surface text-xs text-lumina-muted uppercase"><tr><th className="p-3">Item</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Total</th></tr></thead><tbody className="divide-y divide-lumina-border">{cart.map((c, idx) => (<tr key={idx}><td className="p-3">{c.name} <span className="text-xs text-lumina-muted">{c.sku}</span></td><td className="p-3 text-right">{c.qty}</td><td className="p-3 text-right font-mono">{formatRupiah(c.qty*c.unit_cost)}</td></tr>))}</tbody></table></div><div className="flex items-center gap-3 bg-amber-900/20 p-3 rounded-xl border border-amber-900/50"><input type="checkbox" id="isPaid" checked={formData.isPaid} onChange={e => setFormData({...formData, isPaid: e.target.checked})} className="w-5 h-5 accent-lumina-gold" /><label htmlFor="isPaid" className="text-sm font-bold text-amber-500 cursor-pointer">Paid in Full (Record Expense)</label></div><div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setModalOpen(false)} className="btn-ghost-dark">Cancel</button><button type="submit" className="btn-gold">Create Order</button></div></form></div></div>)}
+            {/* Modal Detail */}{detailOpen && selectedPO && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"><div className="card-luxury w-full max-w-2xl p-6 fade-in-up"><div className="flex justify-between mb-4"><h3 className="text-lg font-bold text-lumina-text">PO Details</h3><button onClick={()=>setDetailOpen(false)} className="text-lumina-muted">✕</button></div><div className="space-y-4"><div className="flex justify-between text-sm border-b border-lumina-border pb-3"><span className="text-lumina-muted">Supplier: <strong className="text-white">{selectedPO.supplier_name}</strong></span><span className="text-lumina-muted">Status: <strong className="text-white uppercase">{selectedPO.payment_status}</strong></span></div><table className="w-full text-sm text-lumina-text"><thead className="bg-lumina-base text-lumina-muted"><tr><th className="p-2 text-left">Product</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Subtotal</th></tr></thead><tbody className="divide-y divide-lumina-border">{poItems.map((i, idx) => (<tr key={idx}><td className="p-2">{i.name} <span className="text-xs text-lumina-muted block">{i.sku}</span></td><td className="p-2 text-right">{i.qty}</td><td className="p-2 text-right font-mono">{formatRupiah(i.subtotal)}</td></tr>))}</tbody><tfoot className="bg-lumina-base font-bold"><tr><td colSpan="2" className="p-2 text-right">Total</td><td className="p-2 text-right text-lumina-gold">{formatRupiah(selectedPO.total_amount)}</td></tr></tfoot></table></div></div></div>)}
         </div>
     );
 }

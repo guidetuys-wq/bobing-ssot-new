@@ -1,73 +1,131 @@
+// app/products/page.js
 "use client";
-import { useState } from "react";
-import ProductView from "@/components/master/ProductView";
-import VariantView from "@/components/master/VariantView";
-import BrandView from "@/components/master/BrandView";
-import CategoryView from "@/components/master/CategoryView";
-import { CubeIcon, TagIcon, BookmarkIcon, FolderIcon, PlusIcon } from "@heroicons/react/24/solid";
+import React, { useState, useEffect, useRef } from 'react';
+import { db, storage } from '@/lib/firebase';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, where } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { sortBySize, formatRupiah } from '@/lib/utils';
+import imageCompression from 'browser-image-compression';
 
-const tabIcons = {
-  products: <CubeIcon className="w-5 h-5" />,
-  variants: <TagIcon className="w-5 h-5" />,
-  brands: <BookmarkIcon className="w-5 h-5" />,
-  categories: <FolderIcon className="w-5 h-5" />,
-};
+export default function ProductsPage() {
+    // ... (Kode ini SAMA PERSIS dengan kode ProductsPage terakhir yang saya berikan di respons sebelumnya yang sudah ada accordion dan modal centered) ...
+    // Agar tidak memotong, saya paste ulang kode lengkapnya di sini untuk memastikan:
 
-export default function ProductHubPage() {
-  const [activeTab, setActiveTab] = useState("products");
+    const [products, setProducts] = useState([]);
+    const [brands, setBrands] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [modalOpen, setModalOpen] = useState(false);
+    const [formData, setFormData] = useState({});
+    const [imageFile, setImageFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [previewUrl, setPreviewUrl] = useState(null);
+    const fileInputRef = useRef(null);
+    const [expandedProductId, setExpandedProductId] = useState(null);
+    const [variantsCache, setVariantsCache] = useState({});
+    const [loadingVariants, setLoadingVariants] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
-  const tabs = [
-    { id: "products", label: "Produk", iconKey: "products", desc: "Parent" },
-    { id: "variants", label: "Varian", iconKey: "variants", desc: "SKU" },
-    { id: "brands", label: "Brand", iconKey: "brands", desc: "" },
-    { id: "categories", label: "Kategori", iconKey: "categories", desc: "" },
-  ];
+    useEffect(() => { fetchData(); }, []);
 
-  return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-8 pt-14 space-y-10">
-      {/* HEADER */}
-      <div className="flex flex-col gap-2 pb-2">
-        <h2 className="text-3xl font-black text-brand-800 tracking-tight">Master Produk</h2>
-        <p className="text-base text-brand-400">Manajemen Katalog Terpusat & Integratif</p>
-      </div>
+    const fetchData = async () => {
+        try {
+            const [snapBrands, snapCats, snapProds] = await Promise.all([
+                getDocs(query(collection(db, "brands"), orderBy("name", "asc"))),
+                getDocs(query(collection(db, "categories"), orderBy("name", "asc"))),
+                getDocs(collection(db, "products"))
+            ]);
+            const bs = []; snapBrands.forEach(d => bs.push({id:d.id, ...d.data()})); setBrands(bs);
+            const cs = []; snapCats.forEach(d => cs.push({id:d.id, ...d.data()})); setCategories(cs);
+            const ps = []; snapProds.forEach(d => { const p=d.data(); const b=bs.find(x=>x.id===p.brand_id); ps.push({id:d.id, ...p, brand_name:b?b.name:''}); });
+            setProducts(ps.sort((a,b)=>(a.base_sku||'').localeCompare(b.base_sku||'')));
+        } catch(e){console.error(e)} finally{setLoading(false)}
+    };
 
-      {/* TABS + Floating Action */}
-      <div className="flex justify-between items-center">
-        <nav className="bg-white/80 border border-gray-100 rounded-2xl shadow flex gap-2 px-2 py-2 overflow-x-auto">
-          {tabs.map((tab) => {
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`group flex items-center gap-2 px-5 py-2 rounded-full font-medium text-base transition-all select-none
-                  ${active ? "bg-gradient-to-r from-brand-50 to-brand-100 text-brand-700 shadow-lg ring-2 ring-brand-200" : "hover:bg-gray-50 text-gray-500"}
-                `}
-              >
-                <span className={`transition ${active ? "scale-110" : "opacity-75 group-hover:opacity-100"}`}>{tabIcons[tab.iconKey]}</span>
-                <span>{tab.label}</span>
-                {tab.desc && (
-                  <span className="ml-2 px-2 bg-gray-100 text-gray-400 text-xs rounded-full font-medium hidden sm:inline">{tab.desc}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-        <button
-          className="ml-5 flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white rounded-full px-4 py-2 shadow-lg transition"
-        >
-          <PlusIcon className="w-4 h-4" /> <span className="font-semibold">Tambah Produk</span>
-        </button>
-      </div>
+    const toggleVariants = async (id) => {
+        if(expandedProductId===id) { setExpandedProductId(null); return; }
+        setExpandedProductId(id);
+        if(!variantsCache[id]) {
+            setLoadingVariants(true);
+            const q = query(collection(db, "product_variants"), where("product_id", "==", id));
+            const s = await getDocs(q); const v=[]; s.forEach(d=>v.push({id:d.id, ...d.data()}));
+            setVariantsCache(prev=>({...prev, [id]:v}));
+            setLoadingVariants(false);
+        }
+    };
 
-      {/* CONTENT */}
-      <div className="card p-0 mt-2">
-        {activeTab === "products" && <ProductView />}
-        {activeTab === "variants" && <VariantView />}
-        {activeTab === "brands" && <BrandView />}
-        {activeTab === "categories" && <CategoryView />}
-      </div>
-    </main>
-  );
+    const openModal = (p=null) => {
+        setImageFile(null); setUploading(false); if(fileInputRef.current) fileInputRef.current.value="";
+        if(p) { setFormData({...p}); setPreviewUrl(p.image_url||null); } 
+        else { setFormData({brand_id:'', name:'', base_sku:'', category:'', status:'active'}); setPreviewUrl(null); }
+        setModalOpen(true);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault(); setUploading(true);
+        try {
+            let url = formData.image_url;
+            if(imageFile) {
+                const blob = await imageCompression(imageFile, {maxSizeMB:0.1, maxWidthOrHeight:800, fileType:'image/webp'}).catch(()=>imageFile);
+                const sRef = ref(storage, `products/${Date.now()}.webp`);
+                await uploadBytes(sRef, blob); url = await getDownloadURL(sRef);
+            }
+            const pl = {...formData, image_url: url||'', updated_at: serverTimestamp()};
+            if(formData.id) await updateDoc(doc(db,"products",formData.id), pl); else { pl.created_at=serverTimestamp(); await addDoc(collection(db,"products"), pl); }
+            setModalOpen(false); fetchData(); alert("Disimpan!");
+        } catch(e){alert(e.message)} finally{setUploading(false)}
+    };
+
+    const deleteProduct = async (id) => { if(confirm("Hapus?")) { await deleteDoc(doc(db,"products",id)); fetchData(); } };
+    
+    const filtered = products.filter(p=>p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.base_sku.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    return (
+        <div className="space-y-6 fade-in pb-20">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-lumina-text">Product Models</h2>
+                <button onClick={()=>openModal()} className="btn-gold">Add Product</button>
+            </div>
+            <div className="bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg w-full max-w-md">
+                <input className="w-full bg-transparent text-lumina-text px-3 py-1 outline-none" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
+            </div>
+
+            <div className="card-luxury overflow-hidden">
+                <table className="table-dark w-full">
+                    <thead><tr><th className="w-16 pl-6">Img</th><th>Info</th><th>Brand</th><th>Status</th><th className="text-right pr-6">Act</th></tr></thead>
+                    <tbody>
+                        {loading ? <tr><td colSpan="5" className="p-8 text-center">Loading...</td></tr> : filtered.map(p => (
+                            <React.Fragment key={p.id}>
+                                <tr onClick={()=>toggleVariants(p.id)} className="hover:bg-lumina-highlight/20 cursor-pointer transition">
+                                    <td className="pl-6 py-3"><div className="w-10 h-10 rounded bg-lumina-base border border-lumina-border overflow-hidden">{p.image_url && <img src={p.image_url} className="w-full h-full object-cover"/>}</div></td>
+                                    <td><div className="font-bold text-lumina-gold text-lg font-mono flex gap-2">{p.base_sku} <span className="text-xs text-lumina-muted">▼</span></div><div className="text-sm text-lumina-text">{p.name}</div></td>
+                                    <td><span className="badge-luxury badge-neutral">{p.brand_name}</span></td>
+                                    <td><span className={`badge-luxury ${p.status==='active'?'badge-success':'badge-danger'}`}>{p.status}</span></td>
+                                    <td className="text-right pr-6"><button onClick={(e)=>{e.stopPropagation(); openModal(p)}} className="text-xs font-bold text-lumina-muted hover:text-white mr-3">Edit</button><button onClick={(e)=>{e.stopPropagation(); deleteProduct(p.id)}} className="text-xs font-bold text-rose-500 hover:text-rose-400">Del</button></td>
+                                </tr>
+                                {expandedProductId===p.id && (
+                                    <tr className="bg-[#0B0C10] border-b border-lumina-border"><td colSpan="5" className="p-4 pl-20"><div className="border border-lumina-border rounded-lg overflow-hidden"><table className="w-full text-sm text-left bg-lumina-surface"><thead className="text-xs text-lumina-muted uppercase bg-lumina-base border-b border-lumina-border"><tr><th className="px-4 py-2">SKU</th><th className="px-4 py-2">Spec</th><th className="px-4 py-2 text-right">Price</th></tr></thead><tbody className="divide-y divide-lumina-border">{(variantsCache[p.id]||[]).sort(sortBySize).map(v=>(<tr key={v.id}><td className="px-4 py-2 font-mono text-lumina-gold">{v.sku}</td><td className="px-4 py-2 text-lumina-text">{v.color} / {v.size}</td><td className="px-4 py-2 text-right font-bold">{formatRupiah(v.price)}</td></tr>))}</tbody></table></div></td></tr>
+                                )}
+                            </React.Fragment>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {modalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">
+                    <div className="bg-lumina-surface border border-lumina-border rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-5 border-b border-lumina-border flex justify-between items-center"><h3 className="text-lg font-bold text-white">{formData.id?'Edit':'New'} Product</h3><button onClick={()=>setModalOpen(false)} className="text-lumina-muted hover:text-white">✕</button></div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+                            <div className="flex items-center gap-4 p-4 bg-lumina-base rounded-xl border border-dashed border-lumina-border"><div className="w-20 h-20 rounded-lg bg-lumina-surface flex items-center justify-center overflow-hidden border border-lumina-border relative">{previewUrl ? <img src={previewUrl} className="w-full h-full object-cover"/>:<span className="text-xs text-lumina-muted">Img</span>}<input type="file" accept="image/*" onChange={(e)=>{if(e.target.files[0]){setImageFile(e.target.files[0]); setPreviewUrl(URL.createObjectURL(e.target.files[0]))}}} className="absolute inset-0 opacity-0 cursor-pointer"/></div><div className="flex-1"><div className="text-xs text-lumina-muted mb-2">Upload Image</div><input ref={fileInputRef} type="file" accept="image/*" onChange={(e)=>{if(e.target.files[0]){setImageFile(e.target.files[0]); setPreviewUrl(URL.createObjectURL(e.target.files[0]))}}} className="text-xs text-lumina-muted file:mr-2 file:py-1 file:px-3 file:rounded-full file:bg-lumina-highlight file:text-white file:border-0"/></div></div>
+                            <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-lumina-muted">Brand</label><select className="input-luxury mt-1" value={formData.brand_id} onChange={e=>setFormData({...formData, brand_id:e.target.value})}>{brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div><div><label className="text-xs font-bold text-lumina-muted">SKU Base</label><input className="input-luxury mt-1 font-mono uppercase" value={formData.base_sku} onChange={e=>setFormData({...formData, base_sku:e.target.value})}/></div></div>
+                            <div><label className="text-xs font-bold text-lumina-muted">Name</label><input className="input-luxury mt-1" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})}/></div>
+                            <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-lumina-muted">Category</label><select className="input-luxury mt-1" value={formData.category} onChange={e=>setFormData({...formData, category:e.target.value})}>{categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></div><div><label className="text-xs font-bold text-lumina-muted">Status</label><select className="input-luxury mt-1" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}><option value="active">Active</option><option value="inactive">Inactive</option></select></div></div>
+                        </div>
+                        <div className="p-6 border-t border-lumina-border bg-lumina-base rounded-b-2xl flex justify-end gap-3"><button onClick={()=>setModalOpen(false)} className="btn-ghost-dark">Cancel</button><button onClick={handleSubmit} className="btn-gold w-32" disabled={uploading}>{uploading?'...':'Save'}</button></div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
 }
