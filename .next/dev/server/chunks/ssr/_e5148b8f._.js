@@ -253,7 +253,7 @@ function InventoryPage() {
         className: "space-y-6 fade-in pb-20",
         children: [
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                className: "flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-lumina-base -mx-4 px-4 md:-mx-8 md:px-8 py-4 border-b border-lumina-border/50 shadow-md sticky top-0 z-30",
+                className: "flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-lumina-base px-4 md:px-8 py-4 border-b border-lumina-border/50 shadow-md sticky top-0 z-30 md:static",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         children: [
@@ -297,12 +297,12 @@ function InventoryPage() {
                                     }, void 0, false, {
                                         fileName: "[project]/app/inventory/page.js",
                                         lineNumber: 195,
-                                        columnNumber: 104
+                                        columnNumber: 100
                                     }, this)
                                 }, void 0, false, {
                                     fileName: "[project]/app/inventory/page.js",
                                     lineNumber: 195,
-                                    columnNumber: 25
+                                    columnNumber: 21
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/inventory/page.js",
@@ -330,7 +330,7 @@ function InventoryPage() {
             }, void 0, true, {
                 fileName: "[project]/app/inventory/page.js",
                 lineNumber: 183,
-                columnNumber: 13
+                columnNumber: 17
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 className: "hidden md:block card-luxury overflow-hidden min-h-[500px]",

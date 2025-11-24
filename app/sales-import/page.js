@@ -239,7 +239,9 @@ export default function ImportSalesPage() {
     return (
         <div className="max-w-4xl mx-auto space-y-6 fade-in pb-20">
             <div className="card-luxury p-8 bg-lumina-surface border-lumina-border">
-                <h2 className="text-xl font-display font-bold text-lumina-text mb-6">Import Sales Report (Marketplace)</h2>
+                <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text mb-6">
+                    Import Sales Report (Marketplace)
+                </h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                     <div>

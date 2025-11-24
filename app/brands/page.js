@@ -89,9 +89,12 @@ export default function BrandsPage() {
     return (
         <div className="max-w-5xl mx-auto space-y-6 fade-in">
             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-lumina-text">Brands</h2>
-                <button onClick={()=>{setFormData({name:'',type:'own_brand'}); setModalOpen(true)}} className="btn-gold">Add Brand</button>
-            </div>
+            <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Brands</h2>
+            <button onClick={() => { setFormData({ name:'', type:'own_brand' }); setModalOpen(true); }} className="btn-gold">
+                Add Brand
+            </button>
+        </div>
+
             
             <div className="card-luxury overflow-hidden">
                 <table className="table-dark w-full">

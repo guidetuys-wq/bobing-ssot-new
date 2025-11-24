@@ -169,13 +169,37 @@ export default function ProductsPage() {
     return (
         <div className="space-y-6 fade-in pb-20">
             {/* Header Solid & Sticky */}
-            <div className="flex justify-between items-center sticky top-0 z-20 bg-lumina-base py-4 px-4 md:px-8 -mx-4 md:-mx-8 border-b border-lumina-border/50 shadow-md">
-                <h2 className="text-xl md:text-2xl font-bold text-lumina-text">Product Models</h2>
-                <button onClick={()=>openModal()} className="btn-gold">Add Product</button>
+            <div className="flex flex-col md:flex-row justify-between items-center sticky top-0 z-20 bg-lumina-base py-4 px-4 md:px-8 border-b border-lumina-border/50 shadow-md md:static">
+            <div className="flex flex-col w-full md:w-auto">
+                <h2 className="text-xl md:text-3xl font-bold text-lumina-text flex-shrink-0">
+                Product Models
+                </h2>
+                <p className="hidden md:block text-sm text-lumina-muted mt-2 font-light">
+                Kelola SKU, Variant dan Detail Master Produk
+                </p>
             </div>
-            
-            <div className="bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg w-full max-w-md sticky top-[72px] z-10">
-                <input className="w-full bg-transparent text-lumina-text px-3 py-1 outline-none" placeholder="Search Model..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
+            <div className="flex w-full md:w-80 flex-row items-center gap-2 mt-2 md:mt-0">
+                <div className="relative w-full">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-lumina-muted">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </span>
+                <input
+                    type="text"
+                    placeholder="Search SKU Produk..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 bg-transparent text-lumina-text text-sm py-2 outline-none placeholder:text-lumina-muted/50 font-mono rounded-full border border-lumina-border"
+                />
+                </div>
+                <button
+                onClick={() => openModal()}
+                className="btn-gold h-10 px-4 rounded-full text-xs font-semibold flex items-center justify-center"
+                >
+                Add
+                </button>
+            </div>
             </div>
 
             {/* --- VIEW DESKTOP (TABLE) --- */}

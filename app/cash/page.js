@@ -315,14 +315,38 @@ export default function CashFlowPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-8 fade-in pb-20">
             <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-display font-bold text-lumina-text">Cash Flow</h2>
-                    <p className="text-sm text-lumina-muted mt-1 font-light">Manage wallets & transactions.</p>
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={() => setModalTfOpen(true)} className="btn-ghost-dark text-xs">Transfer</button>
-                    <button onClick={() => { setFormData({type:'out', date: new Date().toISOString().split('T')[0], account_id:'', category:'', amount:'', description:''}); setModalExpOpen(true); }} className="btn-gold">Record Transaction</button>
-                </div>
+            <div>
+                <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text">
+                Cash Flow
+                </h2>
+                <p className="text-sm text-lumina-muted mt-1 font-light">
+                Manage wallets & transactions.
+                </p>
+            </div>
+            <div className="flex gap-2">
+                <button
+                onClick={() => setModalTfOpen(true)}
+                className="btn-ghost-dark text-xs"
+                >
+                Transfer
+                </button>
+                <button
+                onClick={() => {
+                    setFormData({
+                    type: 'out',
+                    date: new Date().toISOString().split('T')[0],
+                    account_id: '',
+                    category: '',
+                    amount: '',
+                    description: ''
+                    });
+                    setModalExpOpen(true);
+                }}
+                className="btn-gold"
+                >
+                Record Transaction
+                </button>
+            </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

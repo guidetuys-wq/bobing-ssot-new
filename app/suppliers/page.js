@@ -105,7 +105,7 @@ export default function SuppliersPage() {
         <div className="max-w-7xl mx-auto space-y-6 fade-in pb-20">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-display font-bold text-lumina-text tracking-tight">Suppliers</h2>
+                    <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text tracking-tight">Suppliers</h2>
                     <p className="text-sm text-lumina-muted mt-1 font-light">Database of product suppliers.</p>
                 </div>
                 <button onClick={() => openModal()} className="btn-gold">

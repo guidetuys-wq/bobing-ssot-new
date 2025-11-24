@@ -107,26 +107,24 @@ export default function ReportPLPage() {
         <div className="max-w-4xl mx-auto space-y-8 fade-in pb-20">
             {/* Header & Filter */}
             <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-lumina-text font-display">Profit & Loss</h2>
-                    <p className="text-sm text-lumina-muted font-light">Financial performance summary.</p>
-                </div>
-                <div className="flex items-center gap-2 bg-lumina-surface p-1 rounded-lg border border-lumina-border shadow-lg">
-                    <input type="date" className="text-sm bg-transparent text-lumina-text border-none focus:ring-0 outline-none px-2" value={range.start} onChange={e=>setRange({...range, start:e.target.value})} />
-                    <span className="text-lumina-muted">-</span>
-                    <input type="date" className="text-sm bg-transparent text-lumina-text border-none focus:ring-0 outline-none px-2" value={range.end} onChange={e=>setRange({...range, end:e.target.value})} />
-                    
-                    {/* Tombol Filter (Pakai Cache) */}
-                    <button onClick={() => generateReport(false)} className="btn-gold px-4 py-1 text-xs">
-                        {loading ? '...' : 'Filter'}
-                    </button>
-                    
-                    {/* Tombol Refresh (Force Fetch) */}
-                    <button onClick={() => generateReport(true)} className="btn-ghost-dark px-3 py-1 text-xs border-l border-lumina-border ml-1" title="Force Refresh">
-                        ↻
-                    </button>
-                </div>
+            <div>
+                <h2 className="text-xl md:text-3xl font-bold text-lumina-text font-display">Profit & Loss</h2>
+                <p className="text-sm text-lumina-muted font-light">Financial performance summary.</p>
             </div>
+            {/* Filter & Refresh Button, tidak diubah */}
+            <div className="flex items-center gap-2 bg-lumina-surface p-1 rounded-lg border border-lumina-border shadow-lg">
+                <input type="date" className="text-sm bg-transparent text-lumina-text border-none focus:ring-0 outline-none px-2" value={range.start} onChange={e=>setRange({...range, start:e.target.value})} />
+                <span className="text-lumina-muted">-</span>
+                <input type="date" className="text-sm bg-transparent text-lumina-text border-none focus:ring-0 outline-none px-2" value={range.end} onChange={e=>setRange({...range, end:e.target.value})} />
+                <button onClick={() => generateReport(false)} className="btn-gold px-4 py-1 text-xs">
+                {loading ? '...' : 'Filter'}
+                </button>
+                <button onClick={() => generateReport(true)} className="btn-ghost-dark px-3 py-1 text-xs border-l border-lumina-border ml-1" title="Force Refresh">
+                ↻
+                </button>
+            </div>
+            </div>
+
 
             <div className="card-luxury p-8 space-y-8 relative overflow-hidden">
                 {/* Decorative Glow */}

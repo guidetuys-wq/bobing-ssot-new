@@ -180,26 +180,26 @@ export default function InventoryPage() {
     return (
         <div className="space-y-6 fade-in pb-20">
             {/* --- HEADER SECTION (FIXED & SOLID) --- */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-lumina-base -mx-4 px-4 md:-mx-8 md:px-8 py-4 border-b border-lumina-border/50 shadow-md sticky top-0 z-30">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-lumina-base px-4 md:px-8 py-4 border-b border-lumina-border/50 shadow-md sticky top-0 z-30 md:static">
                 <div>
                     <h2 className="text-xl md:text-3xl font-display font-semibold text-lumina-text tracking-tight">
-                        Inventory Control
+                    Inventory Control
                     </h2>
                     <p className="text-sm text-lumina-muted mt-1 font-light hidden md:block">
-                        Monitor stok fisik & virtual secara real-time.
+                    Monitor stok fisik & virtual secara real-time.
                     </p>
                 </div>
-                
+                {/* Search input - tidak diubah */}
                 <div className="w-full md:w-80 bg-lumina-surface p-1.5 rounded-xl border border-lumina-border shadow-lg flex items-center focus-within:ring-1 focus-within:ring-lumina-gold transition-all">
                     <div className="pl-3 text-lumina-muted">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </div>
                     <input 
-                        type="text" 
-                        placeholder="Search Product or SKU..." 
-                        className="w-full bg-transparent text-lumina-text text-sm px-3 py-2 outline-none placeholder:text-lumina-muted/50 font-mono"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                    type="text" 
+                    placeholder="Search Product or SKU..." 
+                    className="w-full bg-transparent text-lumina-text text-sm px-3 py-2 outline-none placeholder:text-lumina-muted/50 font-mono"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
             </div>

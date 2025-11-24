@@ -184,15 +184,21 @@ export default function PurchasesPage() {
     return (
         <div className="space-y-6 fade-in pb-20">
             <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-bold text-lumina-text font-display">Purchase Orders</h2>
-                    <p className="text-sm text-lumina-muted">Manage supplier orders.</p>
-                </div>
-                <div className="flex gap-2">
-                    <Link href="/purchases-import" className="btn-ghost-dark">Import</Link>
-                    <button onClick={() => { setFormData({supplier_id:'', warehouse_id:'', date: new Date().toISOString().split('T')[0], isPaid: false}); setCart([]); setModalOpen(true); }} className="btn-gold">New PO</button>
-                </div>
+            <div>
+                <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text tracking-tight">Purchase Orders</h2>
+                <p className="text-sm text-lumina-muted">Manage supplier orders.</p>
             </div>
+            <div className="flex gap-2">
+                <Link href="/purchases-import" className="btn-ghost-dark">Import</Link>
+                <button
+                onClick={() => { setFormData({ supplier_id:'', warehouse_id:'', date: new Date().toISOString().split('T')[0], isPaid: false}); setCart([]); setModalOpen(true); }}
+                className="btn-gold"
+                >
+                New PO
+                </button>
+            </div>
+            </div>
+
 
             <div className="card-luxury overflow-hidden">
                 <div className="table-wrapper-dark">

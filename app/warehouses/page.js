@@ -174,7 +174,9 @@ export default function WarehousesPage() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">
                     <div className="bg-lumina-surface border border-lumina-border rounded-2xl shadow-2xl max-w-lg w-full p-6 ring-1 ring-lumina-gold/20">
                         <div className="flex justify-between items-center mb-6 pb-4 border-b border-lumina-border">
-                            <h3 className="text-lg font-bold text-lumina-text">{formData.id ? 'Edit Warehouse' : 'New Warehouse'}</h3>
+                            <h2 className="text-xl md:text-3xl font-bold text-lumina-text">
+                                {formData.id ? 'Edit Warehouse' : 'New Warehouse'}
+                            </h2>
                             <button onClick={() => setModalOpen(false)} className="text-lumina-muted hover:text-white text-xl">✕</button>
                         </div>
                         <form onSubmit={handleSubmit} className="space-y-5">

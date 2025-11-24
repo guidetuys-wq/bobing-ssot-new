@@ -183,19 +183,20 @@ export default function FinanceAccountsPage() {
 
   return (
     <div className="space-y-6 fade-in pb-20">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold text-lumina-text">Chart of Accounts</h1>
-          <p className="text-lumina-muted mt-1">Master financial accounts (Assets, Liabilities, Equity).</p>
-        </div>
-        <button
-          onClick={() => openModal()}
-          className="px-6 py-2 bg-lumina-gold text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors whitespace-nowrap"
-        >
-          + ADD ACCOUNT
-        </button>
+        {/* Header */}
+        <div className="flex justify-between items-start">
+      <div>
+        <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Chart of Accounts</h2>
+        <p className="text-lumina-muted mt-1">Master financial accounts (Assets, Liabilities, Equity).</p>
       </div>
+      <button
+        onClick={() => openModal()}
+        className="px-6 py-2 bg-lumina-gold text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors whitespace-nowrap"
+      >
+        + ADD ACCOUNT
+      </button>
+    </div>
+
 
       {/* Table */}
       <div className="card-luxury overflow-hidden">

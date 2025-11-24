@@ -205,7 +205,7 @@ export default function TransactionsHistoryPage() {
             {/* Transactions Table */}
             <div className="card-luxury overflow-hidden">
                 <div className="px-6 py-4 border-b border-lumina-border bg-lumina-surface/50 flex justify-between items-center">
-                    <h3 className="font-bold text-lumina-text text-sm uppercase tracking-wider">Sales Orders (Last 100)</h3>
+                    <h2 className="font-bold text-lumina-text text-sm uppercase tracking-wider">Sales Orders (Last 100)</h2>
                     <div className="text-[10px] font-medium text-lumina-muted bg-lumina-highlight px-2 py-1 rounded">
                         {filteredOrders.length} visible
                     </div>

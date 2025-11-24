@@ -276,18 +276,27 @@ export default function Dashboard() {
         <div className="space-y-8 fade-in pb-20">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
-                <div>
-                    <h2 className="text-3xl font-display font-bold text-lumina-text tracking-tight">Executive Dashboard</h2>
-                    <p className="text-sm text-lumina-muted mt-1 font-light">Real-time business intelligence & analytics.</p>
-                </div>
-                <div className="bg-lumina-surface p-1 rounded-lg border border-lumina-border shadow-lg">
-                    <select value={filterRange} onChange={(e) => setFilterRange(e.target.value)} className="text-sm bg-transparent text-lumina-text font-medium cursor-pointer py-1.5 pl-3 pr-8 outline-none">
-                        <option value="today" className="bg-lumina-base">Hari Ini</option>
-                        <option value="this_month" className="bg-lumina-base">Bulan Ini</option>
-                        <option value="last_month" className="bg-lumina-base">Bulan Lalu</option>
-                    </select>
-                </div>
+            <div>
+                <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text tracking-tight">
+                Executive Dashboard
+                </h2>
+                <p className="text-sm text-lumina-muted mt-1 font-light">
+                Real-time business intelligence & analytics.
+                </p>
             </div>
+            <div className="bg-lumina-surface p-1 rounded-lg border border-lumina-border shadow-lg">
+                <select
+                value={filterRange}
+                onChange={(e) => setFilterRange(e.target.value)}
+                className="text-sm bg-transparent text-lumina-text font-medium cursor-pointer py-1.5 pl-3 pr-8 outline-none"
+                >
+                <option value="today" className="bg-lumina-base">Hari Ini</option>
+                <option value="this_month" className="bg-lumina-base">Bulan Ini</option>
+                <option value="last_month" className="bg-lumina-base">Bulan Lalu</option>
+                </select>
+            </div>
+            </div>
+
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

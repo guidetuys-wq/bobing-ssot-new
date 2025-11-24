@@ -157,9 +157,11 @@ export default function ImportProductsPage() {
     };
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6 fade-in">
+        <div className="max-w-4xl mx-auto space-y-6 fade-in">
             <div className="card-luxury p-6 bg-lumina-surface border-lumina-border">
-                <h2 className="text-xl font-bold text-lumina-text mb-4 font-display">Import Products & Variants</h2>
+                <h2 className="text-xl md:text-3xl font-bold text-lumina-text mb-4 font-display">
+                    Import Products & Variants
+                </h2>
                 <div className="border-2 border-dashed border-lumina-border rounded-xl p-8 text-center bg-lumina-base/50 hover:bg-lumina-base transition-colors cursor-pointer relative group">
                     <input type="file" accept=".csv, .xlsx" onChange={handleFile} disabled={processing} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                     <div className="pointer-events-none relative z-0">

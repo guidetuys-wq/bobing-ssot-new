@@ -150,19 +150,20 @@ export default function CustomersPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-6 fade-in pb-20">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-lumina-text font-display">Customers</h2>
-                    <p className="text-sm text-lumina-muted mt-1 font-light">CRM database for resellers and loyal customers.</p>
-                </div>
-                <div className="flex gap-2">
-                    <button onClick={scanFromSales} disabled={scanning} className="btn-ghost-dark text-xs">
-                        {scanning ? 'Scanning...' : 'Scan Recent Sales'}
-                    </button>
-                    <button onClick={() => openModal()} className="btn-gold">
-                        New Customer
-                    </button>
-                </div>
+            <div>
+                <h2 className="text-xl md:text-3xl font-bold text-lumina-text font-display">Customers</h2>
+                <p className="text-sm text-lumina-muted mt-1 font-light">CRM database for resellers and loyal customers.</p>
             </div>
+            <div className="flex gap-2">
+                <button onClick={scanFromSales} disabled={scanning} className="btn-ghost-dark text-xs">
+                {scanning ? 'Scanning...' : 'Scan Recent Sales'}
+                </button>
+                <button onClick={() => openModal()} className="btn-gold">
+                New Customer
+                </button>
+            </div>
+            </div>
+
 
             <div className="card-luxury overflow-hidden">
                 <div className="table-wrapper-dark border-none shadow-none rounded-none">

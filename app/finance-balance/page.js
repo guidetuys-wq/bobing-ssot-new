@@ -99,14 +99,15 @@ export default function BalanceSheetPage() {
     return (
         <div className="max-w-6xl mx-auto space-y-8 fade-in pb-20">
             <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-display font-bold text-lumina-text tracking-tight">Balance Sheet</h2>
-                    <p className="text-sm text-lumina-muted mt-1 font-light">Real-time financial position snapshot.</p>
-                </div>
-                <button onClick={() => calculate(true)} className="btn-ghost-dark text-xs">
-                    Refresh Data
-                </button>
+            <div>
+                <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text tracking-tight">Balance Sheet</h2>
+                <p className="text-sm text-lumina-muted mt-1 font-light">Real-time financial position snapshot.</p>
             </div>
+            <button onClick={() => calculate(true)} className="btn-ghost-dark text-xs">
+                Refresh Data
+            </button>
+        </div>
+
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* ASSETS */}

@@ -516,6 +516,11 @@ img, video {
   inset: 0;
 }
 
+.inset-y-0 {
+  top: 0;
+  bottom: 0;
+}
+
 .-bottom-10 {
   bottom: -2.5rem;
 }
@@ -582,10 +587,6 @@ img, video {
 
 .top-3 {
   top: .75rem;
-}
-
-.top-\[72px\] {
-  top: 72px;
 }
 
 .top-full {
@@ -678,6 +679,11 @@ img, video {
   margin-bottom: .5rem;
 }
 
+.mx-0\.5 {
+  margin-left: .125rem;
+  margin-right: .125rem;
+}
+
 .mb-0\.5 {
   margin-bottom: .125rem;
 }
@@ -754,6 +760,18 @@ img, video {
   margin-top: 2rem;
 }
 
+.-mr-1 {
+  margin-right: -.25rem;
+}
+
+.-mt-1 {
+  margin-top: -.25rem;
+}
+
+.mt-1\.5 {
+  margin-top: .375rem;
+}
+
 .line-clamp-1 {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
@@ -774,6 +792,10 @@ img, video {
 
 .inline-block {
   display: inline-block;
+}
+
+.inline {
+  display: inline;
 }
 
 .flex {
@@ -1167,8 +1189,16 @@ img, video {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.flex-row {
+  flex-direction: row;
+}
+
 .flex-col {
   flex-direction: column;
+}
+
+.flex-wrap {
+  flex-wrap: wrap;
 }
 
 .content-start {
@@ -1284,6 +1314,14 @@ img, video {
   border-color: rgb(42 46 59 / var(--tw-divide-opacity, 1));
 }
 
+.divide-lumina-border\/30 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #2a2e3b4d;
+}
+
+.self-start {
+  align-self: flex-start;
+}
+
 .overflow-hidden {
   overflow: hidden;
 }
@@ -1371,6 +1409,11 @@ img, video {
 
 .border-4 {
   border-width: 4px;
+}
+
+.border-y {
+  border-top-width: 1px;
+  border-bottom-width: 1px;
 }
 
 .border-b {
@@ -1725,6 +1768,14 @@ img, video {
   background-color: rgb(234 179 8 / var(--tw-bg-opacity, 1));
 }
 
+.bg-lumina-highlight\/10 {
+  background-color: #1c1f2b1a;
+}
+
+.bg-lumina-border\/50 {
+  background-color: #2a2e3b80;
+}
+
 .bg-gradient-to-br {
   background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
 }
@@ -1833,6 +1884,10 @@ img, video {
 
 .p-\[1px\] {
   padding: 1px;
+}
+
+.p-0\.5 {
+  padding: .125rem;
 }
 
 .px-0 {
@@ -2021,6 +2076,10 @@ img, video {
 
 .text-right {
   text-align: right;
+}
+
+.align-middle {
+  vertical-align: middle;
 }
 
 .font-display {
@@ -2424,6 +2483,14 @@ img, video {
   --tw-ring-color: #d4af3733;
 }
 
+.ring-lumina-gold\/30 {
+  --tw-ring-color: #d4af374d;
+}
+
+.ring-transparent {
+  --tw-ring-color: transparent;
+}
+
 .blur-2xl {
   --tw-blur: blur(40px);
   filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
@@ -2659,6 +2726,16 @@ body {
   }
 }
 
+.pb-24 {
+  padding-top: 0;
+}
+
+@media (min-width: 768px) {
+  .sticky-header-fix {
+    margin-bottom: -2rem;
+  }
+}
+
 .placeholder\:text-lumina-muted\/30::placeholder {
   color: #94a3b84d;
 }
@@ -2844,6 +2921,12 @@ body {
   box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
 }
 
+.focus\:ring-2:focus {
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
 .focus\:ring-lumina-gold:focus {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(212 175 55 / var(--tw-ring-opacity, 1));
@@ -2924,10 +3007,6 @@ body {
     display: none;
   }
 
-  .sm\:w-64 {
-    width: 16rem;
-  }
-
   .sm\:grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2942,6 +3021,10 @@ body {
 }
 
 @media (min-width: 768px) {
+  .md\:static {
+    position: static;
+  }
+
   .md\:col-span-3 {
     grid-column: span 3 / span 3;
   }
@@ -2951,12 +3034,20 @@ body {
     margin-right: -2rem;
   }
 
+  .md\:mt-0 {
+    margin-top: 0;
+  }
+
   .md\:block {
     display: block;
   }
 
   .md\:flex {
     display: flex;
+  }
+
+  .md\:grid {
+    display: grid;
   }
 
   .md\:hidden {
@@ -2971,8 +3062,16 @@ body {
     width: 12rem;
   }
 
+  .md\:w-64 {
+    width: 16rem;
+  }
+
   .md\:w-80 {
     width: 20rem;
+  }
+
+  .md\:w-auto {
+    width: auto;
   }
 
   .md\:max-w-none {

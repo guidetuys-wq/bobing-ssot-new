@@ -382,8 +382,8 @@ function WarehousesPage() {
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "flex justify-between items-center mb-6 pb-4 border-b border-lumina-border",
                                 children: [
-                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
-                                        className: "text-lg font-bold text-lumina-text",
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
+                                        className: "text-xl md:text-3xl font-bold text-lumina-text",
                                         children: formData.id ? 'Edit Warehouse' : 'New Warehouse'
                                     }, void 0, false, {
                                         fileName: "[project]/app/warehouses/page.js",
@@ -396,7 +396,7 @@ function WarehousesPage() {
                                         children: "✕"
                                     }, void 0, false, {
                                         fileName: "[project]/app/warehouses/page.js",
-                                        lineNumber: 178,
+                                        lineNumber: 180,
                                         columnNumber: 29
                                     }, this)
                                 ]
@@ -416,7 +416,7 @@ function WarehousesPage() {
                                                 children: "Warehouse Name"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 182,
+                                                lineNumber: 184,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -430,13 +430,13 @@ function WarehousesPage() {
                                                 placeholder: "e.g. Gudang Utama"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 183,
+                                                lineNumber: 185,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/warehouses/page.js",
-                                        lineNumber: 181,
+                                        lineNumber: 183,
                                         columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -446,7 +446,7 @@ function WarehousesPage() {
                                                 children: "Type"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 186,
+                                                lineNumber: 188,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -462,7 +462,7 @@ function WarehousesPage() {
                                                         children: "🏠 Physical (Inventory)"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/warehouses/page.js",
-                                                        lineNumber: 188,
+                                                        lineNumber: 190,
                                                         columnNumber: 37
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -470,19 +470,19 @@ function WarehousesPage() {
                                                         children: "☁️ Virtual (Supplier Stock)"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/warehouses/page.js",
-                                                        lineNumber: 189,
+                                                        lineNumber: 191,
                                                         columnNumber: 37
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 187,
+                                                lineNumber: 189,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/warehouses/page.js",
-                                        lineNumber: 185,
+                                        lineNumber: 187,
                                         columnNumber: 29
                                     }, this),
                                     formData.type === 'virtual_supplier' && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -493,7 +493,7 @@ function WarehousesPage() {
                                                 children: "Link to Supplier"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 194,
+                                                lineNumber: 196,
                                                 columnNumber: 37
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -509,7 +509,7 @@ function WarehousesPage() {
                                                         children: "-- Select Supplier --"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/warehouses/page.js",
-                                                        lineNumber: 196,
+                                                        lineNumber: 198,
                                                         columnNumber: 41
                                                     }, this),
                                                     suppliers.map((s)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -517,19 +517,19 @@ function WarehousesPage() {
                                                             children: s.name
                                                         }, s.id, false, {
                                                             fileName: "[project]/app/warehouses/page.js",
-                                                            lineNumber: 197,
+                                                            lineNumber: 199,
                                                             columnNumber: 61
                                                         }, this))
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 195,
+                                                lineNumber: 197,
                                                 columnNumber: 37
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/warehouses/page.js",
-                                        lineNumber: 193,
+                                        lineNumber: 195,
                                         columnNumber: 33
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -539,7 +539,7 @@ function WarehousesPage() {
                                                 children: "Address"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 202,
+                                                lineNumber: 204,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("textarea", {
@@ -553,13 +553,13 @@ function WarehousesPage() {
                                                 placeholder: "Location address..."
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 203,
+                                                lineNumber: 205,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/warehouses/page.js",
-                                        lineNumber: 201,
+                                        lineNumber: 203,
                                         columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -572,7 +572,7 @@ function WarehousesPage() {
                                                 children: "Cancel"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 206,
+                                                lineNumber: 208,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -581,19 +581,19 @@ function WarehousesPage() {
                                                 children: "Save Warehouse"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/warehouses/page.js",
-                                                lineNumber: 207,
+                                                lineNumber: 209,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/warehouses/page.js",
-                                        lineNumber: 205,
+                                        lineNumber: 207,
                                         columnNumber: 29
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/warehouses/page.js",
-                                lineNumber: 180,
+                                lineNumber: 182,
                                 columnNumber: 25
                             }, this)
                         ]

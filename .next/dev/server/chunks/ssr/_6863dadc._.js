@@ -179,12 +179,12 @@ function VariantsPage() {
                 className: "flex justify-between items-center",
                 children: [
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("h2", {
-                        className: "text-2xl font-bold text-lumina-text",
+                        className: "text-xl md:text-3xl font-bold text-lumina-text",
                         children: "Master SKU"
                     }, void 0, false, {
                         fileName: "[project]/app/variants/page.js",
                         lineNumber: 115,
-                        columnNumber: 17
+                        columnNumber: 13
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
                         onClick: ()=>{
@@ -204,13 +204,13 @@ function VariantsPage() {
                     }, void 0, false, {
                         fileName: "[project]/app/variants/page.js",
                         lineNumber: 116,
-                        columnNumber: 17
+                        columnNumber: 13
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/variants/page.js",
                 lineNumber: 114,
-                columnNumber: 14
+                columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                 className: "bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg max-w-md",
@@ -221,12 +221,12 @@ function VariantsPage() {
                     onChange: (e)=>setSearchTerm(e.target.value)
                 }, void 0, false, {
                     fileName: "[project]/app/variants/page.js",
-                    lineNumber: 119,
+                    lineNumber: 121,
                     columnNumber: 17
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/variants/page.js",
-                lineNumber: 118,
+                lineNumber: 120,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -242,21 +242,21 @@ function VariantsPage() {
                                         children: "SKU"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 124,
+                                        lineNumber: 126,
                                         columnNumber: 32
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                         children: "Parent"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 124,
+                                        lineNumber: 126,
                                         columnNumber: 61
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
                                         children: "Spec"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 124,
+                                        lineNumber: 126,
                                         columnNumber: 76
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -264,7 +264,7 @@ function VariantsPage() {
                                         children: "Price"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 124,
+                                        lineNumber: 126,
                                         columnNumber: 89
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("th", {
@@ -272,18 +272,18 @@ function VariantsPage() {
                                         children: "Action"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 124,
+                                        lineNumber: 126,
                                         columnNumber: 126
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 124,
+                                lineNumber: 126,
                                 columnNumber: 28
                             }, this)
                         }, void 0, false, {
                             fileName: "[project]/app/variants/page.js",
-                            lineNumber: 124,
+                            lineNumber: 126,
                             columnNumber: 21
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("tbody", {
@@ -295,7 +295,7 @@ function VariantsPage() {
                                             children: v.sku
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 128,
+                                            lineNumber: 130,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -303,7 +303,7 @@ function VariantsPage() {
                                             children: products.find((p)=>p.id === v.product_id)?.name
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 129,
+                                            lineNumber: 131,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -316,12 +316,12 @@ function VariantsPage() {
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 130,
+                                                lineNumber: 132,
                                                 columnNumber: 37
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 130,
+                                            lineNumber: 132,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -329,7 +329,7 @@ function VariantsPage() {
                                             children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatRupiah"])(v.price)
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 131,
+                                            lineNumber: 133,
                                             columnNumber: 33
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -345,34 +345,34 @@ function VariantsPage() {
                                                 children: "Edit"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 132,
+                                                lineNumber: 134,
                                                 columnNumber: 65
                                             }, this)
                                         }, void 0, false, {
                                             fileName: "[project]/app/variants/page.js",
-                                            lineNumber: 132,
+                                            lineNumber: 134,
                                             columnNumber: 33
                                         }, this)
                                     ]
                                 }, v.id, true, {
                                     fileName: "[project]/app/variants/page.js",
-                                    lineNumber: 127,
+                                    lineNumber: 129,
                                     columnNumber: 29
                                 }, this))
                         }, void 0, false, {
                             fileName: "[project]/app/variants/page.js",
-                            lineNumber: 125,
+                            lineNumber: 127,
                             columnNumber: 21
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/variants/page.js",
-                    lineNumber: 123,
+                    lineNumber: 125,
                     columnNumber: 17
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/variants/page.js",
-                lineNumber: 122,
+                lineNumber: 124,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$usePortal$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["Portal"], {
@@ -389,7 +389,7 @@ function VariantsPage() {
                                         children: formData.id ? 'Edit SKU' : 'New SKU'
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 145,
+                                        lineNumber: 147,
                                         columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -398,13 +398,13 @@ function VariantsPage() {
                                         children: "✕"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 146,
+                                        lineNumber: 148,
                                         columnNumber: 29
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 144,
+                                lineNumber: 146,
                                 columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -418,7 +418,7 @@ function VariantsPage() {
                                                 children: "Parent Product"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 150,
+                                                lineNumber: 152,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -430,12 +430,12 @@ function VariantsPage() {
                                                         children: p.name
                                                     }, p.id, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 151,
+                                                        lineNumber: 153,
                                                         columnNumber: 146
                                                     }, this))
                                             }, void 0, false, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 151,
+                                                lineNumber: 153,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -446,13 +446,13 @@ function VariantsPage() {
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 152,
+                                                lineNumber: 154,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 149,
+                                        lineNumber: 151,
                                         columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -465,7 +465,7 @@ function VariantsPage() {
                                                         children: "Color"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 155,
+                                                        lineNumber: 157,
                                                         columnNumber: 38
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -477,13 +477,13 @@ function VariantsPage() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 155,
+                                                        lineNumber: 157,
                                                         columnNumber: 106
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 155,
+                                                lineNumber: 157,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -493,7 +493,7 @@ function VariantsPage() {
                                                         children: "Size"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 156,
+                                                        lineNumber: 158,
                                                         columnNumber: 38
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -505,13 +505,13 @@ function VariantsPage() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 156,
+                                                        lineNumber: 158,
                                                         columnNumber: 105
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 156,
+                                                lineNumber: 158,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -521,7 +521,7 @@ function VariantsPage() {
                                                         children: "Weight (g)"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 157,
+                                                        lineNumber: 159,
                                                         columnNumber: 38
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -534,19 +534,19 @@ function VariantsPage() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 157,
+                                                        lineNumber: 159,
                                                         columnNumber: 111
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 157,
+                                                lineNumber: 159,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 154,
+                                        lineNumber: 156,
                                         columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -559,7 +559,7 @@ function VariantsPage() {
                                                         children: "SKU Final"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 160,
+                                                        lineNumber: 162,
                                                         columnNumber: 38
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -574,7 +574,7 @@ function VariantsPage() {
                                                                     })
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/variants/page.js",
-                                                                lineNumber: 160,
+                                                                lineNumber: 162,
                                                                 columnNumber: 143
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -583,19 +583,19 @@ function VariantsPage() {
                                                                 children: "Auto"
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/variants/page.js",
-                                                                lineNumber: 160,
+                                                                lineNumber: 162,
                                                                 columnNumber: 269
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 160,
+                                                        lineNumber: 162,
                                                         columnNumber: 110
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 160,
+                                                lineNumber: 162,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -605,7 +605,7 @@ function VariantsPage() {
                                                         children: "Barcode"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 161,
+                                                        lineNumber: 163,
                                                         columnNumber: 38
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -617,19 +617,19 @@ function VariantsPage() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 161,
+                                                        lineNumber: 163,
                                                         columnNumber: 108
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 161,
+                                                lineNumber: 163,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 159,
+                                        lineNumber: 161,
                                         columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -642,7 +642,7 @@ function VariantsPage() {
                                                         children: "HPP"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 164,
+                                                        lineNumber: 166,
                                                         columnNumber: 38
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -655,13 +655,13 @@ function VariantsPage() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 164,
+                                                        lineNumber: 166,
                                                         columnNumber: 104
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 164,
+                                                lineNumber: 166,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -671,7 +671,7 @@ function VariantsPage() {
                                                         children: "Sell Price"
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 165,
+                                                        lineNumber: 167,
                                                         columnNumber: 38
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -684,25 +684,25 @@ function VariantsPage() {
                                                             })
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/variants/page.js",
-                                                        lineNumber: 165,
+                                                        lineNumber: 167,
                                                         columnNumber: 110
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/variants/page.js",
-                                                lineNumber: 165,
+                                                lineNumber: 167,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 163,
+                                        lineNumber: 165,
                                         columnNumber: 29
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 148,
+                                lineNumber: 150,
                                 columnNumber: 25
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -714,7 +714,7 @@ function VariantsPage() {
                                         children: "Cancel"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 169,
+                                        lineNumber: 171,
                                         columnNumber: 29
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
@@ -723,29 +723,29 @@ function VariantsPage() {
                                         children: "Save SKU"
                                     }, void 0, false, {
                                         fileName: "[project]/app/variants/page.js",
-                                        lineNumber: 170,
+                                        lineNumber: 172,
                                         columnNumber: 29
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/variants/page.js",
-                                lineNumber: 168,
+                                lineNumber: 170,
                                 columnNumber: 25
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/variants/page.js",
-                        lineNumber: 143,
+                        lineNumber: 145,
                         columnNumber: 21
                     }, this)
                 }, void 0, false, {
                     fileName: "[project]/app/variants/page.js",
-                    lineNumber: 142,
+                    lineNumber: 144,
                     columnNumber: 17
                 }, this)
             }, void 0, false, {
                 fileName: "[project]/app/variants/page.js",
-                lineNumber: 140,
+                lineNumber: 142,
                 columnNumber: 13
             }, this)
         ]

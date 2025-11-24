@@ -88,9 +88,12 @@ export default function CategoriesPage() {
     return (
         <div className="max-w-4xl mx-auto space-y-6 fade-in">
             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-lumina-text">Categories</h2>
-                <button onClick={()=>{setFormData({name:''}); setModalOpen(true)}} className="btn-gold">Add Category</button>
+            <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Categories</h2>
+            <button onClick={() => { setFormData({ name:'' }); setModalOpen(true); }} className="btn-gold">
+                Add Category
+            </button>
             </div>
+
             
             <div className="card-luxury overflow-hidden">
                 <table className="table-dark w-full">

@@ -111,3 +111,12 @@ body {
   @page { margin: 0; size: auto; }
 }
 
+.pb-24 {
+    padding-top: 0;
+}
+
+@media (min-width: 768px) {
+    .sticky-header-fix {
+        margin-bottom: -2rem;
+    }
+}

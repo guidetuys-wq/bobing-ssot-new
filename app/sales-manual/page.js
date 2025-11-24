@@ -414,7 +414,10 @@ export default function PosPage() {
                         <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
                             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
                         </div>
-                        <h2 className="text-2xl font-extrabold text-white">Transaksi Berhasil!</h2>
+                        <h2 className="text-xl md:text-3xl font-extrabold text-white">
+                            Transaksi Berhasil!
+                        </h2>
+
                         <div className="bg-lumina-base p-5 rounded-2xl border border-lumina-border space-y-3 mt-6">
                             <div className="flex justify-between text-sm"><span className="text-lumina-muted">Total</span><span className="font-bold text-white">{formatRupiah(invoiceData.total)}</span></div>
                             <div className="flex justify-between text-sm"><span className="text-lumina-muted">Tunai</span><span className="font-bold text-white">{formatRupiah(invoiceData.received)}</span></div>

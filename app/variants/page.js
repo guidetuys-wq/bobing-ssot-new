@@ -111,9 +111,11 @@ export default function VariantsPage() {
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 fade-in pb-20">
-             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-lumina-text">Master SKU</h2>
-                <button onClick={()=>{setFormData({product_id:'',sku:'',color:'',size:'',cost:0,price:0,status:'active'}); setModalOpen(true);}} className="btn-gold">Add SKU</button>
+            <div className="flex justify-between items-center">
+            <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Master SKU</h2>
+            <button onClick={() => { setFormData({ product_id:'', sku:'', color:'', size:'', cost:0, price:0, status:'active' }); setModalOpen(true); }} className="btn-gold">
+                Add SKU
+            </button>
             </div>
             <div className="bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg max-w-md">
                 <input className="w-full bg-transparent text-lumina-text px-3 py-1 outline-none" placeholder="Search SKU..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
