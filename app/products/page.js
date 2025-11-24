@@ -6,6 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { sortBySize, formatRupiah } from '@/lib/utils';
 import imageCompression from 'browser-image-compression';
 import { Portal } from '@/lib/usePortal';
+import toast from 'react-hot-toast';
 
 // Konfigurasi Cache
 const CACHE_KEY = 'lumina_products_page_data';
@@ -36,7 +37,6 @@ export default function ProductsPage() {
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
         try {
-            // 1. Cek Cache
             if (!forceRefresh) {
                 const cached = sessionStorage.getItem(CACHE_KEY);
                 if (cached) {
@@ -51,19 +51,14 @@ export default function ProductsPage() {
                 }
             }
 
-            // 2. Fetch Firebase
             const [snapBrands, snapCats, snapProds] = await Promise.all([
                 getDocs(query(collection(db, "brands"), orderBy("name", "asc"))),
                 getDocs(query(collection(db, "categories"), orderBy("name", "asc"))),
-                getDocs(query(collection(db, "products"), limit(100))) // Safety Limit
+                getDocs(query(collection(db, "products"), limit(100)))
             ]);
 
-            const bs = []; 
-            snapBrands.forEach(d => bs.push({id:d.id, ...d.data()}));
-            
-            const cs = []; 
-            snapCats.forEach(d => cs.push({id:d.id, ...d.data()}));
-            
+            const bs = []; snapBrands.forEach(d => bs.push({id:d.id, ...d.data()}));
+            const cs = []; snapCats.forEach(d => cs.push({id:d.id, ...d.data()}));
             const ps = []; 
             snapProds.forEach(d => { 
                 const p=d.data(); 
@@ -77,7 +72,6 @@ export default function ProductsPage() {
             setCategories(cs);
             setProducts(sortedProducts);
 
-            // 3. Simpan Cache
             sessionStorage.setItem(CACHE_KEY, JSON.stringify({
                 brands: bs,
                 categories: cs,
@@ -87,6 +81,7 @@ export default function ProductsPage() {
 
         } catch(e) {
             console.error(e);
+            toast.error("Gagal memuat data");
         } finally {
             setLoading(false);
         }
@@ -96,7 +91,6 @@ export default function ProductsPage() {
         if(expandedProductId===id) { setExpandedProductId(null); return; }
         setExpandedProductId(id);
         
-        // Cache variants di state (InMemory) saja cukup untuk detail drill-down
         if(!variantsCache[id]) {
             setLoadingVariants(true);
             const q = query(collection(db, "product_variants"), where("product_id", "==", id));
@@ -111,7 +105,7 @@ export default function ProductsPage() {
     const handleImageChange = (e) => {
         if (e.target.files[0]) {
             const file = e.target.files[0];
-            if (!file.type.startsWith('image/')) return alert('Harap upload file gambar.');
+            if (!file.type.startsWith('image/')) return toast.error('Harap upload file gambar.');
             setImageFile(file);
             setPreviewUrl(URL.createObjectURL(file));
         }
@@ -127,32 +121,38 @@ export default function ProductsPage() {
     const handleSubmit = async (e) => {
         e.preventDefault(); 
         setUploading(true);
-        try {
-            let url = formData.image_url;
-            if(imageFile) {
-                const blob = await imageCompression(imageFile, {maxSizeMB:0.1, maxWidthOrHeight:800, fileType:'image/webp'}).catch(()=>imageFile);
-                const sRef = ref(storage, `products/${Date.now()}.webp`);
-                await uploadBytes(sRef, blob); url = await getDownloadURL(sRef);
+        
+        const savePromise = new Promise(async (resolve, reject) => {
+            try {
+                let url = formData.image_url;
+                if(imageFile) {
+                    const blob = await imageCompression(imageFile, {maxSizeMB:0.1, maxWidthOrHeight:800, fileType:'image/webp'}).catch(()=>imageFile);
+                    const sRef = ref(storage, `products/${Date.now()}.webp`);
+                    await uploadBytes(sRef, blob); url = await getDownloadURL(sRef);
+                }
+                const pl = {...formData, image_url: url||'', updated_at: serverTimestamp()};
+                
+                if(formData.id) {
+                    await updateDoc(doc(db,"products",formData.id), pl); 
+                } else { 
+                    pl.created_at=serverTimestamp(); 
+                    await addDoc(collection(db,"products"), pl); 
+                }
+                
+                sessionStorage.removeItem(CACHE_KEY);
+                setModalOpen(false); 
+                fetchData(true); 
+                resolve();
+            } catch(e) {
+                reject(e);
             }
-            const pl = {...formData, image_url: url||'', updated_at: serverTimestamp()};
-            
-            if(formData.id) {
-                await updateDoc(doc(db,"products",formData.id), pl); 
-            } else { 
-                pl.created_at=serverTimestamp(); 
-                await addDoc(collection(db,"products"), pl); 
-            }
-            
-            // Reset Cache & Refresh
-            sessionStorage.removeItem(CACHE_KEY);
-            setModalOpen(false); 
-            fetchData(true); 
-            alert("Disimpan!");
-        } catch(e) {
-            alert(e.message);
-        } finally {
-            setUploading(false);
-        }
+        });
+
+        toast.promise(savePromise, {
+            loading: 'Menyimpan...',
+            success: 'Produk disimpan!',
+            error: (err) => `Gagal: ${err.message}`,
+        }).finally(() => setUploading(false));
     };
 
     const deleteProduct = async (id) => { 
@@ -160,6 +160,7 @@ export default function ProductsPage() {
             await deleteDoc(doc(db,"products",id)); 
             sessionStorage.removeItem(CACHE_KEY);
             fetchData(true); 
+            toast.success("Produk dihapus");
         } 
     };
     
@@ -167,220 +168,199 @@ export default function ProductsPage() {
 
     return (
         <div className="space-y-6 fade-in pb-20">
-            <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-lumina-text">Product Models</h2>
+            {/* Header Solid & Sticky */}
+            <div className="flex justify-between items-center sticky top-0 z-20 bg-lumina-base py-4 px-4 md:px-8 -mx-4 md:-mx-8 border-b border-lumina-border/50 shadow-md">
+                <h2 className="text-xl md:text-2xl font-bold text-lumina-text">Product Models</h2>
                 <button onClick={()=>openModal()} className="btn-gold">Add Product</button>
             </div>
-            <div className="bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg w-full max-w-md">
-                <input className="w-full bg-transparent text-lumina-text px-3 py-1 outline-none" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
+            
+            <div className="bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg w-full max-w-md sticky top-[72px] z-10">
+                <input className="w-full bg-transparent text-lumina-text px-3 py-1 outline-none" placeholder="Search Model..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
             </div>
 
-            <div className="card-luxury overflow-hidden">
+            {/* --- VIEW DESKTOP (TABLE) --- */}
+            <div className="hidden md:block card-luxury overflow-hidden">
                 <table className="table-dark w-full">
-                    <thead><tr><th className="w-16 pl-6">Img</th><th>Info</th><th>Brand</th><th>Status</th><th className="text-right pr-6">Act</th></tr></thead>
+                    <thead><tr><th className="w-16 pl-6">Img</th><th>Product Name</th><th>Base SKU</th><th>Brand</th><th className="text-center">Status</th><th className="text-right pr-8">Actions</th><th className="w-10"></th></tr></thead>
                     <tbody>
-                        {loading ? <tr><td colSpan="5" className="p-8 text-center">Loading...</td></tr> : filtered.map(p => (
-                            <React.Fragment key={p.id}>
-                                <tr onClick={()=>toggleVariants(p.id)} className="hover:bg-lumina-highlight/20 cursor-pointer transition">
-                                    <td className="pl-6 py-3"><div className="w-10 h-10 rounded bg-lumina-base border border-lumina-border overflow-hidden">{p.image_url && <img src={p.image_url} className="w-full h-full object-cover"/>}</div></td>
-                                    <td><div className="font-bold text-lumina-gold text-lg font-mono flex gap-2">{p.base_sku} <span className="text-xs text-lumina-muted">▼</span></div><div className="text-sm text-lumina-text">{p.name}</div></td>
-                                    <td><span className="badge-luxury badge-neutral">{p.brand_name}</span></td>
-                                    <td><span className={`badge-luxury ${p.status==='active'?'badge-success':'badge-danger'}`}>{p.status}</span></td>
-                                    <td className="text-right pr-6"><button onClick={(e)=>{e.stopPropagation(); openModal(p)}} className="text-xs font-bold text-lumina-muted hover:text-white mr-3">Edit</button><button onClick={(e)=>{e.stopPropagation(); deleteProduct(p.id)}} className="text-xs font-bold text-rose-500 hover:text-rose-400">Del</button></td>
-                                </tr>
-                                {expandedProductId===p.id && (
-                                    <tr className="bg-[#0B0C10] border-b border-lumina-border"><td colSpan="5" className="p-4 pl-20"><div className="border border-lumina-border rounded-lg overflow-hidden"><table className="w-full text-sm text-left bg-lumina-surface"><thead className="text-xs text-lumina-muted uppercase bg-lumina-base border-b border-lumina-border"><tr><th className="px-4 py-2">SKU</th><th className="px-4 py-2">Spec</th><th className="px-4 py-2 text-right">Price</th></tr></thead><tbody className="divide-y divide-lumina-border">{(variantsCache[p.id]||[]).sort(sortBySize).map(v=>(<tr key={v.id}><td className="px-4 py-2 font-mono text-lumina-gold">{v.sku}</td><td className="px-4 py-2 text-lumina-text">{v.color} / {v.size}</td><td className="px-4 py-2 text-right font-bold">{formatRupiah(v.price)}</td></tr>))}</tbody></table></div></td></tr>
-                                )}
-                            </React.Fragment>
-                        ))}
+                        {loading ? <tr><td colSpan="7" className="p-12 text-center text-lumina-muted animate-pulse">Loading...</td></tr> : filtered.map(p => {
+                            const isExpanded = expandedProductId === p.id;
+                            return (
+                                <React.Fragment key={p.id}>
+                                    {/* PARENT ROW */}
+                                    <tr 
+                                        onClick={() => toggleVariants(p.id)} 
+                                        className={`group cursor-pointer transition-all duration-200 ${isExpanded ? 'bg-lumina-highlight/30 border-l-4 border-l-lumina-gold' : 'hover:bg-lumina-highlight/20 border-l-4 border-l-transparent'}`}
+                                    >
+                                        <td className="pl-6 py-4">
+                                            <div className="w-12 h-12 rounded-lg bg-lumina-base border border-lumina-border flex items-center justify-center overflow-hidden shadow-inner">
+                                                {p.image_url ? (
+                                                    <img src={p.image_url} alt="Product" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <svg className="w-5 h-5 text-lumina-muted opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="font-display font-medium text-lumina-text text-base group-hover:text-lumina-gold transition-colors">{p.name}</div>
+                                            <div className="text-xs text-lumina-muted mt-1">{p.category}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="font-mono text-sm text-lumina-muted group-hover:text-white transition-colors">{p.base_sku}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="badge-luxury badge-neutral">{p.brand_name}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`badge-luxury ${p.status==='active'?'badge-success':'badge-danger'}`}>{p.status}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right pr-8" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => openModal(p)} className="text-[10px] uppercase font-bold text-lumina-muted hover:text-white border border-lumina-border hover:border-white rounded px-2 py-1 transition-colors">EDIT</button>
+                                                <button onClick={() => deleteProduct(p.id)} className="text-[10px] uppercase font-bold text-rose-500 hover:text-rose-400 border border-rose-500/30 hover:border-rose-400 rounded px-2 py-1 transition-colors">DEL</button>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className={`transform transition-transform duration-300 text-lumina-gold inline-block ${isExpanded ? 'rotate-180' : 'rotate-0'}`}>
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"/></svg>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {/* EXPANDED CONTENT */}
+                                    {isExpanded && (
+                                        <tr className="bg-[#0F1115] shadow-inner border-b border-lumina-border">
+                                            <td colSpan="7" className="p-0">
+                                                <div className="p-6 fade-in">
+                                                    <div className="border border-lumina-border rounded-lg overflow-hidden w-full bg-lumina-base">
+                                                        <table className="w-full text-sm text-left">
+                                                            <thead className="bg-lumina-surface text-[10px] text-lumina-muted uppercase tracking-wider font-semibold border-b border-lumina-border">
+                                                                <tr>
+                                                                    <th className="px-4 py-3">Variant SKU</th>
+                                                                    <th className="px-4 py-3">Color</th>
+                                                                    <th className="px-4 py-3">Size</th>
+                                                                    <th className="px-4 py-3 text-right">Price</th>
+                                                                    <th className="px-4 py-3 text-right">Cost</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-lumina-border">
+                                                                {loadingVariants ? (
+                                                                    <tr><td colSpan="5" className="p-4 text-center text-xs text-lumina-muted animate-pulse">Loading variants...</td></tr>
+                                                                ) : (variantsCache[p.id]||[]).sort(sortBySize).map(v => (
+                                                                    <tr key={v.id} className="hover:bg-lumina-highlight/20 transition-colors">
+                                                                        <td className="px-4 py-3 font-mono text-lumina-gold text-xs font-bold">{v.sku}</td>
+                                                                        <td className="px-4 py-3 text-lumina-text">{v.color}</td>
+                                                                        <td className="px-4 py-3 text-lumina-text">{v.size}</td>
+                                                                        <td className="px-4 py-3 text-right font-mono font-medium text-white">{formatRupiah(v.price)}</td>
+                                                                        <td className="px-4 py-3 text-right font-mono text-lumina-muted">{formatRupiah(v.cost)}</td>
+                                                                    </tr>
+                                                                ))}
+                                                                {(!loadingVariants && (!variantsCache[p.id] || variantsCache[p.id].length === 0)) && (
+                                                                     <tr><td colSpan="5" className="p-4 text-center text-xs text-lumina-muted">No variants found.</td></tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
 
+            {/* --- VIEW MOBILE (CARDS) --- */}
+            <div className="md:hidden grid grid-cols-1 gap-4">
+                {loading ? <div className="text-center py-10">Loading...</div> : filtered.map(p => (
+                    <div key={p.id} onClick={()=>toggleVariants(p.id)} className="card-luxury p-4 active:scale-[0.98] transition-transform">
+                         <div className="flex gap-4 items-center">
+                            <div className="w-16 h-16 rounded-lg bg-lumina-base border border-lumina-border flex-shrink-0 overflow-hidden">
+                                {p.image_url ? <img src={p.image_url} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center text-xs text-lumina-muted">IMG</div>}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start">
+                                    <span className="text-xs font-mono font-bold text-lumina-gold bg-lumina-base px-1.5 py-0.5 rounded border border-lumina-border">{p.base_sku}</span>
+                                    <span className={`text-[10px] px-1.5 rounded border ${p.status==='active'?'border-emerald-500/30 text-emerald-400':'border-rose-500/30 text-rose-400'}`}>{p.status}</span>
+                                </div>
+                                <h3 className="text-sm font-bold text-white mt-1 truncate">{p.name}</h3>
+                                <p className="text-xs text-lumina-muted mt-0.5">{p.brand_name} • {p.category}</p>
+                            </div>
+                         </div>
+                         
+                         {/* Mobile Actions */}
+                         <div className="mt-3 pt-3 border-t border-lumina-border flex justify-between items-center">
+                             <button className="text-xs text-lumina-muted flex items-center gap-1">
+                                 Lihat Varian {expandedProductId===p.id ? '▲' : '▼'}
+                             </button>
+                             <div className="flex gap-3">
+                                <button onClick={(e)=>{e.stopPropagation(); openModal(p)}} className="text-xs font-bold text-lumina-gold">EDIT</button>
+                                <button onClick={(e)=>{e.stopPropagation(); deleteProduct(p.id)}} className="text-xs font-bold text-rose-500">DEL</button>
+                             </div>
+                         </div>
+
+                         {/* Mobile Variants Expand */}
+                         {expandedProductId===p.id && (
+                             <div className="mt-3 bg-lumina-base rounded-lg border border-lumina-border p-2 animate-fade-in">
+                                 <div className="text-[10px] text-lumina-muted mb-2 uppercase tracking-wider font-bold">Varian Tersedia</div>
+                                 <div className="space-y-2">
+                                     {(variantsCache[p.id]||[]).sort(sortBySize).map(v=>(
+                                         <div key={v.id} className="flex justify-between items-center text-xs border-b border-lumina-border/50 pb-1 last:border-0 last:pb-0">
+                                             <div>
+                                                 <div className="font-mono text-lumina-gold">{v.sku}</div>
+                                                 <div className="text-lumina-muted">{v.color} / {v.size}</div>
+                                             </div>
+                                             <div className="font-bold">{formatRupiah(v.price)}</div>
+                                         </div>
+                                     ))}
+                                     {loadingVariants && <div className="text-center text-xs py-2 text-lumina-muted">Memuat varian...</div>}
+                                 </div>
+                             </div>
+                         )}
+                    </div>
+                ))}
+            </div>
+
+            {/* Modal (Same for Mobile & Desktop) */}
             <Portal>
             {modalOpen && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                {/* Backdrop */}
-                <div
-                    className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999]"
-                    onClick={() => setModalOpen(false)}
-                />
-
-                {/* Modal */}
-                <div className="relative z-[10000] bg-lumina-surface border border-lumina-border rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
-                    
-                    {/* HEADER */}
-                    <div className="px-6 py-4 border-b border-lumina-border flex justify-between items-center bg-lumina-surface rounded-t-2xl flex-shrink-0">
-                    <h3 className="text-xl font-bold text-white">
-                        {formData.id ? "Edit Product" : "New Product"}
-                    </h3>
-                    <button
-                        onClick={() => setModalOpen(false)}
-                        className="text-lumina-muted hover:text-white transition-colors p-1"
-                        aria-label="Close modal"
-                    >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                    </div>
-
-                    {/* SCROLLABLE CONTENT */}
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 space-y-5 bg-lumina-base custom-scrollbar">
-                    
-                    {/* Image Upload */}
-                    <div className="flex items-center gap-4 p-4 bg-lumina-surface rounded-lg border border-dashed border-lumina-border hover:border-lumina-gold/50 transition-colors">
-                        <div className="w-24 h-24 rounded-lg bg-lumina-base flex items-center justify-center overflow-hidden border border-lumina-border flex-shrink-0 relative">
-                        {previewUrl ? (
-                            <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                        ) : (
-                            <span className="text-xs text-lumina-muted font-mono">IMG</span>
-                        )}
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleImageChange}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                            disabled={uploading}
-                        />
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-lumina-surface border border-lumina-border rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-lumina-border flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-white">{formData.id ? "Edit" : "Baru"}</h3>
+                            <button onClick={() => setModalOpen(false)} className="text-2xl text-lumina-muted">×</button>
                         </div>
-                        <div className="flex-1">
-                        <div className="text-sm font-semibold text-lumina-text mb-1">Product Image</div>
-                        <div className="text-xs text-lumina-muted mb-3">Max 2MB, Auto WebP Compress.</div>
-                        <label className="inline-block">
-                            <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            onChange={handleImageChange}
-                            className="hidden"
-                            disabled={uploading}
-                            />
-                            <span className="inline-block px-4 py-2 bg-lumina-highlight text-white text-xs font-semibold rounded-full cursor-pointer hover:bg-lumina-gold transition-colors">
-                            Choose File
-                            </span>
-                        </label>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+                            {/* Existing Form Content */}
+                            <div className="flex items-center gap-4 p-4 bg-lumina-surface rounded-lg border border-dashed border-lumina-border">
+                                <div className="w-20 h-20 rounded-lg bg-lumina-base flex items-center justify-center overflow-hidden border border-lumina-border relative">
+                                    {previewUrl ? <img src={previewUrl} className="w-full h-full object-cover" /> : <span className="text-xs">IMG</span>}
+                                    <input type="file" accept="image/*" onChange={handleImageChange} className="absolute inset-0 opacity-0" disabled={uploading}/>
+                                </div>
+                                <div className="flex-1">
+                                    <div className="text-xs mb-2">Ganti Gambar (Max 2MB)</div>
+                                    <label className="btn-ghost-dark text-xs py-1 px-3 inline-block cursor-pointer">
+                                        Pilih File
+                                        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" disabled={uploading}/>
+                                    </label>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="text-xs font-bold block mb-1">Brand</label><select className="input-luxury" value={formData.brandId} onChange={e=>setFormData({...formData, brandId:e.target.value})}>{brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+                                <div><label className="text-xs font-bold block mb-1">SKU Base</label><input className="input-luxury" value={formData.baseSku} onChange={e=>setFormData({...formData, baseSku:e.target.value})} /></div>
+                            </div>
+                            <div><label className="text-xs font-bold block mb-1">Nama Produk</label><input className="input-luxury" value={formData.name} onChange={e=>setFormData({...formData, name:e.target.value})} /></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="text-xs font-bold block mb-1">Kategori</label><select className="input-luxury" value={formData.category} onChange={e=>setFormData({...formData, category:e.target.value})}>{categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></div>
+                                <div><label className="text-xs font-bold block mb-1">Status</label><select className="input-luxury" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-lumina-border flex justify-end gap-3">
+                            <button onClick={()=>setModalOpen(false)} className="btn-ghost-dark">Batal</button>
+                            <button onClick={handleSubmit} className="btn-gold">{uploading ? '...' : 'Simpan'}</button>
                         </div>
                     </div>
-
-                    {/* Brand & SKU */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                        <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Brand</label>
-                        <select
-                            className="w-full px-3 py-2 bg-lumina-base border border-lumina-border rounded-lg text-white focus:border-lumina-gold outline-none"
-                            value={formData.brandId || ""}
-                            onChange={(e) => setFormData({ ...formData, brandId: e.target.value })}
-                            disabled={uploading}
-                        >
-                            <option value="">-- Select --</option>
-                            {brands.map((b) => (
-                            <option key={b.id} value={b.id}>{b.name}</option>
-                            ))}
-                        </select>
-                        </div>
-                        <div>
-                        <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Base SKU</label>
-                        <input
-                            type="text"
-                            required
-                            className="w-full px-3 py-2 bg-lumina-base border border-lumina-border rounded-lg text-white font-mono uppercase focus:border-lumina-gold outline-none"
-                            value={formData.baseSku || "PRD-001"}
-                            onChange={(e) => setFormData({ ...formData, baseSku: e.target.value })}
-                            placeholder="PRD-001"
-                            disabled={uploading}
-                        />
-                        </div>
-                    </div>
-
-                    {/* Product Name */}
-                    <div>
-                        <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Product Name</label>
-                        <input
-                        type="text"
-                        required
-                        className="w-full px-3 py-2 bg-lumina-base border border-lumina-border rounded-lg text-white focus:border-lumina-gold outline-none"
-                        value={formData.name || ""}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="Enter product name..."
-                        disabled={uploading}
-                        />
-                    </div>
-
-                    {/* Category & Status */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                        <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Category</label>
-                        <select
-                            required
-                            className="w-full px-3 py-2 bg-lumina-base border border-lumina-border rounded-lg text-white focus:border-lumina-gold outline-none"
-                            value={formData.category || ""}
-                            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                            disabled={uploading}
-                        >
-                            <option value="">-- Select --</option>
-                            {categories.map((c) => (
-                            <option key={c.id} value={c.name}>{c.name}</option>
-                            ))}
-                        </select>
-                        </div>
-                        <div>
-                        <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Status</label>
-                        <select
-                            className="w-full px-3 py-2 bg-lumina-base border border-lumina-border rounded-lg text-white focus:border-lumina-gold outline-none"
-                            value={formData.status || "active"}
-                            onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                            disabled={uploading}
-                        >
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
-                        </div>
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                        <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Description</label>
-                        <textarea
-                        rows={5}
-                        className="w-full px-3 py-2 bg-lumina-base border border-lumina-border rounded-lg text-white focus:border-lumina-gold outline-none resize-none"
-                        value={formData.description || ""}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Product details..."
-                        disabled={uploading}
-                        />
-                    </div>
-
-                    </div>
-
-                    {/* FOOTER */}
-                    <div className="px-6 py-4 border-t border-lumina-border bg-lumina-surface rounded-b-2xl flex justify-end gap-3 flex-shrink-0">
-                    <button
-                        type="button"
-                        onClick={() => setModalOpen(false)}
-                        className="px-6 py-2 bg-lumina-base text-white rounded-lg hover:bg-lumina-highlight transition-colors font-medium"
-                        disabled={uploading}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleSubmit}
-                        className="px-8 py-2 bg-lumina-gold text-black rounded-lg hover:bg-yellow-400 transition-colors font-semibold flex items-center gap-2"
-                        disabled={uploading}
-                    >
-                        {uploading ? (
-                        <>
-                            <span className="inline-block w-4 h-4 border-2 border-transparent border-t-black rounded-full animate-spin"></span>
-                            Saving...
-                        </>
-                        ) : (
-                        "SAVE"
-                        )}
-                    </button>
-                    </div>
-
-                </div>
                 </div>
             )}
             </Portal>

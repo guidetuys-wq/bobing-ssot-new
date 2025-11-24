@@ -1,10 +1,9 @@
-// app/brands/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-// Menambahkan 'limit' pada import
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+import toast from 'react-hot-toast'; // Import toast
 
 // Konfigurasi Cache
 const CACHE_KEY = 'lumina_brands_data';
@@ -23,23 +22,18 @@ export default function BrandsPage() {
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
         try {
-            // 1. Cek Cache Dulu (Hemat Reads)
             if (!forceRefresh) {
                 const cached = sessionStorage.getItem(CACHE_KEY);
                 if (cached) {
                     const { data, timestamp } = JSON.parse(cached);
-                    // Jika cache belum kadaluarsa (kurang dari 5 menit)
                     if (Date.now() - timestamp < CACHE_DURATION) {
                         setBrands(data);
                         setLoading(false);
-                        console.log("Brands loaded from Cache (0 Reads)");
-                        return; // Stop, jangan panggil Firebase
+                        return; 
                     }
                 }
             }
 
-            // 2. Panggil Firebase (Jika tidak ada cache atau forceRefresh)
-            // Menambahkan limit(100) untuk keamanan kuota
             const q = query(
                 collection(db, "brands"), 
                 orderBy("name"), 
@@ -51,16 +45,14 @@ export default function BrandsPage() {
             s.forEach(x => d.push({id:x.id, ...x.data()}));
             
             setBrands(d);
-
-            // 3. Simpan hasil ke Cache
             sessionStorage.setItem(CACHE_KEY, JSON.stringify({
                 data: d,
                 timestamp: Date.now()
             }));
-            console.log("Brands fetched from Firebase (Reads charged)");
 
         } catch(e) {
             console.error(e);
+            toast.error("Gagal memuat data brands");
         } finally {
             setLoading(false);
         }
@@ -68,21 +60,30 @@ export default function BrandsPage() {
 
     const handleSubmit = async (e) => { 
         e.preventDefault(); 
-        try { 
-            if(formData.id) {
-                await updateDoc(doc(db,"brands",formData.id), formData);
-            } else {
-                await addDoc(collection(db,"brands"), {...formData, created_at: serverTimestamp()}); 
-            }
-            
-            // Hapus cache agar data terbaru termuat ulang
-            sessionStorage.removeItem(CACHE_KEY);
-            
-            setModalOpen(false); 
-            fetchData(true); // Force refresh true
-        } catch(e) {
-            alert(e.message);
-        } 
+        
+        // Menggunakan toast.promise untuk feedback loading/sukses/gagal
+        const savePromise = new Promise(async (resolve, reject) => {
+            try { 
+                if(formData.id) {
+                    await updateDoc(doc(db,"brands",formData.id), formData);
+                } else {
+                    await addDoc(collection(db,"brands"), {...formData, created_at: serverTimestamp()}); 
+                }
+                
+                sessionStorage.removeItem(CACHE_KEY);
+                setModalOpen(false); 
+                fetchData(true); 
+                resolve();
+            } catch(e) {
+                reject(e);
+            } 
+        });
+
+        toast.promise(savePromise, {
+            loading: 'Menyimpan...',
+            success: 'Brand berhasil disimpan!',
+            error: (err) => `Gagal: ${err.message}`,
+        });
     };
 
     return (

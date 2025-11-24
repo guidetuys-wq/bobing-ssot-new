@@ -1,13 +1,12 @@
-// app/customers/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, writeBatch, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+import toast from 'react-hot-toast';
 
-// Konfigurasi Cache
 const CACHE_KEY = 'lumina_customers_data';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
+const CACHE_DURATION = 5 * 60 * 1000; 
 
 export default function CustomersPage() {
     const [customers, setCustomers] = useState([]);
@@ -16,14 +15,11 @@ export default function CustomersPage() {
     const [formData, setFormData] = useState({});
     const [scanning, setScanning] = useState(false);
 
-    useEffect(() => { 
-        fetchData(); 
-    }, []);
+    useEffect(() => { fetchData(); }, []);
 
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
         try {
-            // 1. Cek Cache
             if (!forceRefresh) {
                 const cached = sessionStorage.getItem(CACHE_KEY);
                 if (cached) {
@@ -36,81 +32,70 @@ export default function CustomersPage() {
                 }
             }
 
-            // 2. Fetch Data (Limit 100)
-            const q = query(
-                collection(db, "customers"), 
-                orderBy("name", "asc"),
-                limit(100) // Safety limit
-            );
-            
+            const q = query(collection(db, "customers"), orderBy("name", "asc"), limit(100));
             const snap = await getDocs(q);
             const data = [];
             snap.forEach(d => data.push({id: d.id, ...d.data()}));
             
             setCustomers(data);
-
-            // 3. Simpan Cache
-            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
-                data: data,
-                timestamp: Date.now()
-            }));
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
 
         } catch (e) { 
             console.error(e); 
+            toast.error("Gagal memuat customers");
         } finally { 
             setLoading(false); 
         }
     };
 
     const scanFromSales = async () => {
-        if(!confirm("Scan 500 transaksi terakhir untuk data pelanggan baru?")) return;
+        if(!confirm("Scan 500 transaksi terakhir?")) return;
         setScanning(true);
-        try {
-            // OPTIMASI: Jangan ambil semua sales, cukup 500 terakhir
-            const qSales = query(
-                collection(db, "sales_orders"), 
-                orderBy("order_date", "desc"), 
-                limit(500)
-            );
-            const snapSales = await getDocs(qSales);
-            
-            const newCandidates = {};
-            snapSales.forEach(doc => {
-                const s = doc.data();
-                const name = s.customer_name || '';
-                const phone = s.customer_phone || '';
-                // Filter data valid
-                if (phone.length > 9 && !phone.includes('*') && !name.includes('*')) {
-                    if (!newCandidates[phone]) {
-                        newCandidates[phone] = { name, phone, address: s.shipping_address || '', type: 'end_customer' };
+        const scanPromise = new Promise(async (resolve, reject) => {
+            try {
+                const qSales = query(collection(db, "sales_orders"), orderBy("order_date", "desc"), limit(500));
+                const snapSales = await getDocs(qSales);
+                const newCandidates = {};
+                
+                snapSales.forEach(doc => {
+                    const s = doc.data();
+                    const name = s.customer_name || '';
+                    const phone = s.customer_phone || '';
+                    if (phone.length > 9 && !phone.includes('*') && !name.includes('*')) {
+                        if (!newCandidates[phone]) {
+                            newCandidates[phone] = { name, phone, address: s.shipping_address || '', type: 'end_customer' };
+                        }
                     }
-                }
-            });
-
-            const existingPhones = new Set(customers.map(c => c.phone));
-            const finalToAdd = Object.values(newCandidates).filter(c => !existingPhones.has(c.phone));
-
-            if (finalToAdd.length === 0) {
-                alert("Scan selesai. Tidak ditemukan data baru dari 500 transaksi terakhir.");
-            } else {
-                const batch = writeBatch(db);
-                finalToAdd.forEach(c => {
-                    const ref = doc(collection(db, "customers"));
-                    batch.set(ref, { ...c, created_at: serverTimestamp(), source: 'auto_scan' });
                 });
-                await batch.commit();
-                
-                // Reset cache karena ada data baru
-                sessionStorage.removeItem(CACHE_KEY);
-                
-                alert(`Berhasil menyimpan ${finalToAdd.length} pelanggan baru!`);
-                fetchData(true);
+
+                const existingPhones = new Set(customers.map(c => c.phone));
+                const finalToAdd = Object.values(newCandidates).filter(c => !existingPhones.has(c.phone));
+
+                if (finalToAdd.length === 0) {
+                    resolve("Tidak ditemukan data baru.");
+                } else {
+                    const batch = writeBatch(db);
+                    finalToAdd.forEach(c => {
+                        const ref = doc(collection(db, "customers"));
+                        batch.set(ref, { ...c, created_at: serverTimestamp(), source: 'auto_scan' });
+                    });
+                    await batch.commit();
+                    sessionStorage.removeItem(CACHE_KEY);
+                    fetchData(true);
+                    resolve(`Berhasil menyimpan ${finalToAdd.length} pelanggan baru!`);
+                }
+            } catch (e) { 
+                reject(e); 
+            } finally { 
+                setScanning(false); 
             }
-        } catch (e) { 
-            alert(e.message); 
-        } finally { 
-            setScanning(false); 
-        }
+        });
+
+        toast.promise(scanPromise, {
+            loading: 'Scanning...',
+            success: (msg) => msg,
+            error: (err) => `Gagal: ${err.message}`,
+        });
     };
 
     const openModal = (cust = null) => {
@@ -120,42 +105,50 @@ export default function CustomersPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        try {
-            const payload = {
-                name: formData.name,
-                type: formData.type,
-                phone: formData.phone,
-                address: formData.address,
-                updated_at: serverTimestamp()
-            };
-            if (formData.id) {
-                await updateDoc(doc(db, "customers", formData.id), payload);
-            } else { 
-                payload.created_at = serverTimestamp(); 
-                await addDoc(collection(db, "customers"), payload); 
-            }
-            
-            // Reset cache
-            sessionStorage.removeItem(CACHE_KEY);
-            
-            setModalOpen(false); 
-            fetchData(true);
-        } catch (e) { alert(e.message); }
+        const savePromise = new Promise(async (resolve, reject) => {
+            try {
+                const payload = {
+                    name: formData.name,
+                    type: formData.type,
+                    phone: formData.phone,
+                    address: formData.address,
+                    updated_at: serverTimestamp()
+                };
+                if (formData.id) await updateDoc(doc(db, "customers", formData.id), payload);
+                else { 
+                    payload.created_at = serverTimestamp(); 
+                    await addDoc(collection(db, "customers"), payload); 
+                }
+                
+                sessionStorage.removeItem(CACHE_KEY);
+                setModalOpen(false); 
+                fetchData(true);
+                resolve();
+            } catch (e) { reject(e); }
+        });
+
+        toast.promise(savePromise, {
+            loading: 'Menyimpan...',
+            success: 'Data berhasil disimpan',
+            error: (err) => `Gagal: ${err.message}`
+        });
     };
 
     const deleteItem = async (id) => {
         if(confirm("Hapus pelanggan?")) { 
-            await deleteDoc(doc(db, "customers", id)); 
-            
-            // Reset cache
-            sessionStorage.removeItem(CACHE_KEY);
-            fetchData(true); 
+            try {
+                await deleteDoc(doc(db, "customers", id)); 
+                sessionStorage.removeItem(CACHE_KEY);
+                fetchData(true);
+                toast.success("Pelanggan dihapus");
+            } catch(e) {
+                toast.error("Gagal menghapus");
+            }
         }
     };
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 fade-in pb-20">
-            {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-lumina-text font-display">Customers</h2>
@@ -166,13 +159,11 @@ export default function CustomersPage() {
                         {scanning ? 'Scanning...' : 'Scan Recent Sales'}
                     </button>
                     <button onClick={() => openModal()} className="btn-gold">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
                         New Customer
                     </button>
                 </div>
             </div>
 
-            {/* Table */}
             <div className="card-luxury overflow-hidden">
                 <div className="table-wrapper-dark border-none shadow-none rounded-none">
                     <table className="table-dark">
@@ -186,34 +177,25 @@ export default function CustomersPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {loading ? (
-                                <tr><td colSpan="5" className="text-center py-12 text-lumina-muted">Loading...</td></tr>
-                            ) : customers.map(c => {
-                                let badgeClass = 'badge-neutral';
-                                if(c.type === 'reseller') badgeClass = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-                                if(c.type === 'vip') badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-                                
-                                return (
-                                    <tr key={c.id}>
-                                        <td className="pl-6 font-medium text-lumina-text">{c.name}</td>
-                                        <td><span className={`badge-luxury ${badgeClass}`}>{c.type?.replace('_', ' ')}</span></td>
-                                        <td className="font-mono text-lumina-muted text-xs">{c.phone || '-'}</td>
-                                        <td className="text-lumina-muted truncate max-w-xs text-xs">{c.address || '-'}</td>
-                                        <td className="text-right pr-6">
-                                            <div className="flex justify-end gap-3">
-                                                <button onClick={() => openModal(c)} className="text-xs font-bold text-lumina-muted hover:text-white transition-colors">Edit</button>
-                                                <button onClick={() => deleteItem(c.id)} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Del</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                            {loading ? <tr><td colSpan="5" className="text-center py-12 text-lumina-muted">Loading...</td></tr> : customers.map(c => (
+                                <tr key={c.id}>
+                                    <td className="pl-6 font-medium text-lumina-text">{c.name}</td>
+                                    <td><span className="badge-luxury badge-neutral">{c.type?.replace('_', ' ')}</span></td>
+                                    <td className="font-mono text-lumina-muted text-xs">{c.phone || '-'}</td>
+                                    <td className="text-lumina-muted truncate max-w-xs text-xs">{c.address || '-'}</td>
+                                    <td className="text-right pr-6">
+                                        <div className="flex justify-end gap-3">
+                                            <button onClick={() => openModal(c)} className="text-xs font-bold text-lumina-muted hover:text-white transition-colors">Edit</button>
+                                            <button onClick={() => deleteItem(c.id)} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Del</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            {/* Modal */}
             <Portal>
             {modalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">

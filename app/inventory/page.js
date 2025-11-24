@@ -178,15 +178,19 @@ export default function InventoryPage() {
     };
 
     return (
-        <div className="space-y-8 fade-in pb-20">
-            {/* --- HEADER SECTION --- */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="space-y-6 fade-in pb-20">
+            {/* --- HEADER SECTION (FIXED & SOLID) --- */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-lumina-base -mx-4 px-4 md:-mx-8 md:px-8 py-4 border-b border-lumina-border/50 shadow-md sticky top-0 z-30">
                 <div>
-                    <h2 className="text-3xl font-display font-semibold text-lumina-text tracking-tight">Inventory Control</h2>
-                    <p className="text-sm text-lumina-muted mt-1 font-light">Monitor stok fisik & virtual secara real-time.</p>
+                    <h2 className="text-xl md:text-3xl font-display font-semibold text-lumina-text tracking-tight">
+                        Inventory Control
+                    </h2>
+                    <p className="text-sm text-lumina-muted mt-1 font-light hidden md:block">
+                        Monitor stok fisik & virtual secara real-time.
+                    </p>
                 </div>
                 
-                <div className="bg-lumina-surface p-1.5 rounded-xl border border-lumina-border shadow-lg flex items-center w-full md:w-80 focus-within:ring-1 focus-within:ring-lumina-gold transition-all">
+                <div className="w-full md:w-80 bg-lumina-surface p-1.5 rounded-xl border border-lumina-border shadow-lg flex items-center focus-within:ring-1 focus-within:ring-lumina-gold transition-all">
                     <div className="pl-3 text-lumina-muted">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </div>
@@ -200,8 +204,8 @@ export default function InventoryPage() {
                 </div>
             </div>
 
-            {/* --- INVENTORY TABLE (ACCORDION) --- */}
-            <div className="card-luxury overflow-hidden min-h-[500px]">
+            {/* --- DESKTOP VIEW (TABLE) --- */}
+            <div className="hidden md:block card-luxury overflow-hidden min-h-[500px]">
                 <div className="table-wrapper-dark border-none shadow-none rounded-none">
                     <table className="table-dark">
                         <thead>
@@ -329,63 +333,81 @@ export default function InventoryPage() {
                 </div>
             </div>
 
-            {/* --- DETAIL MODAL (FIXED HEIGHT & SCROLL) --- */}
-            <Portal>
-            {modalDetailOpen && selectedProduct && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">
-                    <div className="bg-lumina-surface border border-lumina-border rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden">
-                        <div className="p-6 border-b border-lumina-border flex justify-between items-center bg-lumina-surface z-10">
-                            <div className="flex items-center gap-4">
-                                {selectedProduct.image_url && <img src={selectedProduct.image_url} className="w-12 h-12 rounded-lg border border-lumina-border object-cover" />}
-                                <div>
-                                    <h3 className="text-xl font-bold text-white font-display">{selectedProduct.base_sku}</h3>
-                                    <p className="text-sm text-lumina-muted">{selectedProduct.name}</p>
+             {/* --- MOBILE VIEW (CARDS) --- */}
+             <div className="md:hidden grid grid-cols-1 gap-4">
+                {loading ? (
+                    <div className="text-center py-10 text-lumina-muted animate-pulse">Calculating Stock...</div>
+                ) : filteredProducts.length === 0 ? (
+                     <div className="text-center py-10 text-lumina-muted">No products found.</div>
+                ) : (
+                    filteredProducts.map(p => {
+                         const isExpanded = expandedProductId === p.id;
+                         const isLowStock = p.totalStock <= 10;
+
+                         return (
+                             <div key={p.id} onClick={() => toggleAccordion(p.id)} className="card-luxury p-4 active:scale-[0.98] transition-transform">
+                                {/* Card Header */}
+                                <div className="flex gap-4 items-start">
+                                    <div className="w-16 h-16 rounded-lg bg-lumina-base border border-lumina-border flex-shrink-0 overflow-hidden">
+                                         {p.image_url ? (
+                                            <img src={p.image_url} alt="Product" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-lumina-muted"><span className="text-xs">IMG</span></div>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
+                                             <span className="text-xs font-mono font-bold text-lumina-gold bg-lumina-base px-1.5 py-0.5 rounded border border-lumina-border">{p.base_sku}</span>
+                                             <span className={`text-sm font-bold font-mono ${p.totalStock === 0 ? 'text-rose-500' : (isLowStock ? 'text-amber-500' : 'text-emerald-400')}`}>
+                                                {p.totalStock} <span className="text-[10px] text-lumina-muted font-normal">qty</span>
+                                            </span>
+                                        </div>
+                                        <h3 className="text-sm font-bold text-white mt-1 truncate">{p.name}</h3>
+                                        <div className="flex items-center justify-between mt-1">
+                                            <span className="text-[10px] text-lumina-muted">{p.variants.length} Varian</span>
+                                            <span className="badge-luxury badge-neutral text-[9px]">{p.category}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="bg-lumina-base border border-lumina-border p-1 rounded-lg flex shadow-sm">
-                                    <button onClick={() => setModalGroup('color')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${modalGroup==='color' ? 'bg-lumina-gold text-black' : 'text-lumina-muted hover:bg-lumina-highlight'}`}>Color</button>
-                                    <button onClick={() => setModalGroup('size')} className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${modalGroup==='size' ? 'bg-lumina-gold text-black' : 'text-lumina-muted hover:bg-lumina-highlight'}`}>Size</button>
-                                </div>
-                                <button onClick={() => setModalDetailOpen(false)} className="text-lumina-muted hover:text-white p-1 text-2xl">✕</button>
-                            </div>
-                        </div>
-                        
-                        {/* SCROLLABLE CONTENT */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar bg-lumina-base">
-                            <table className="table-dark w-full">
-                                <thead className="sticky top-0 z-10 bg-lumina-surface shadow-md border-b border-lumina-border">
-                                    <tr>
-                                        <th className="pl-6">Variant</th>
-                                        {warehouses.map(w => <th key={w.id} className={`text-center ${w.type==='virtual_supplier' ? 'text-indigo-400' : 'text-emerald-500'}`}>{w.name}</th>)}
-                                        <th className="text-center pr-6">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-lumina-border">
-                                    {selectedProduct.variants.sort(sortBySize).map(v => (
-                                        <tr key={v.id} className="hover:bg-lumina-highlight/20">
-                                            <td className="pl-6 font-medium text-lumina-text">
-                                                {modalGroup === 'color' ? v.size : v.color} <span className="ml-2 badge-luxury badge-neutral">{v.sku}</span>
-                                            </td>
-                                            {warehouses.map(w => {
-                                                const qty = snapshots[`${v.id}_${w.id}`] || 0;
-                                                return <td key={w.id} className={`text-center font-mono font-bold ${qty>0 ? 'text-white' : 'text-lumina-border'}`}>{qty}</td>
-                                            })}
-                                            <td className="text-center pr-6">
-                                                <div className="flex justify-center gap-2">
-                                                    <button onClick={() => openOpname(v, selectedProduct.name)} className="btn-ghost-dark px-2 py-1 text-[10px]">Opname</button>
-                                                    <button onClick={() => openCard(v.id, v.sku)} className="btn-ghost-dark px-2 py-1 text-[10px]">History</button>
+
+                                {/* Expanded Content (Variants) */}
+                                {isExpanded && (
+                                    <div className="mt-4 border-t border-lumina-border pt-3 space-y-4 animate-fade-in">
+                                        {p.variants.sort(sortBySize).map(v => (
+                                            <div key={v.id} className="bg-lumina-base/50 rounded-lg p-3 border border-lumina-border/50">
+                                                <div className="flex justify-between items-center mb-2">
+                                                     <div>
+                                                        <div className="text-xs font-mono text-lumina-gold">{v.sku}</div>
+                                                        <div className="text-[10px] text-white">{v.color} / {v.size}</div>
+                                                     </div>
+                                                     <div className="flex gap-2">
+                                                         <button onClick={(e) => { e.stopPropagation(); openOpname(v, p.name); }} className="px-2 py-1 bg-lumina-surface border border-lumina-border rounded text-[10px] hover:border-lumina-gold text-lumina-muted hover:text-lumina-gold">Opname</button>
+                                                         <button onClick={(e) => { e.stopPropagation(); openCard(v.id, v.sku); }} className="px-2 py-1 bg-lumina-surface border border-lumina-border rounded text-[10px] hover:border-white text-lumina-muted hover:text-white">History</button>
+                                                     </div>
                                                 </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
-            </Portal>
+                                                
+                                                {/* Warehouse Breakdown (Mobile Grid) */}
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {warehouses.map(w => {
+                                                        const qty = snapshots[`${v.id}_${w.id}`] || 0;
+                                                        if(w.type === 'virtual_supplier' && qty === 0) return null; 
+                                                        return (
+                                                            <div key={w.id} className="flex justify-between items-center text-[10px] bg-lumina-base px-2 py-1 rounded border border-lumina-border/30">
+                                                                <span className={`truncate max-w-[80px] ${w.type==='virtual_supplier' ? 'text-indigo-400' : 'text-lumina-muted'}`}>{w.name}</span>
+                                                                <span className={`font-mono font-bold ${qty > 0 ? 'text-white' : 'text-lumina-muted/30'}`}>{qty}</span>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                             </div>
+                         );
+                    })
+                )}
+            </div>
 
             {/* --- STOCK OPNAME MODAL (FIXED) --- */}
             <Portal>

@@ -1,9 +1,9 @@
-// app/categories/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+import toast from 'react-hot-toast';
 
 // Konfigurasi Cache
 const CACHE_KEY = 'lumina_categories_data';
@@ -22,7 +22,6 @@ export default function CategoriesPage() {
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
         try {
-            // 1. Cek Cache
             if (!forceRefresh) {
                 const cached = sessionStorage.getItem(CACHE_KEY);
                 if (cached) {
@@ -30,16 +29,15 @@ export default function CategoriesPage() {
                     if (Date.now() - timestamp < CACHE_DURATION) {
                         setData(cachedData);
                         setLoading(false);
-                        return; // Stop, hemat reads
+                        return;
                     }
                 }
             }
 
-            // 2. Fetch dari Firebase (jika cache expired/forceRefresh)
             const q = query(
                 collection(db, "categories"), 
                 orderBy("name"),
-                limit(100) // Limit keamanan
+                limit(100)
             );
             
             const s = await getDocs(q);
@@ -47,8 +45,6 @@ export default function CategoriesPage() {
             s.forEach(x => d.push({id:x.id, ...x.data()}));
             
             setData(d);
-
-            // 3. Simpan ke Cache
             sessionStorage.setItem(CACHE_KEY, JSON.stringify({
                 data: d,
                 timestamp: Date.now()
@@ -56,6 +52,7 @@ export default function CategoriesPage() {
 
         } catch(e) {
             console.error(e);
+            toast.error("Gagal memuat kategori");
         } finally {
             setLoading(false);
         }
@@ -63,21 +60,29 @@ export default function CategoriesPage() {
 
     const handleSubmit = async (e) => { 
         e.preventDefault(); 
-        try { 
-            if(formData.id) {
-                await updateDoc(doc(db,"categories",formData.id), formData); 
-            } else {
-                await addDoc(collection(db,"categories"), {...formData, created_at: serverTimestamp()});
+        
+        const savePromise = new Promise(async (resolve, reject) => {
+            try { 
+                if(formData.id) {
+                    await updateDoc(doc(db,"categories",formData.id), formData); 
+                } else {
+                    await addDoc(collection(db,"categories"), {...formData, created_at: serverTimestamp()});
+                }
+                
+                sessionStorage.removeItem(CACHE_KEY);
+                setModalOpen(false); 
+                fetchData(true); 
+                resolve();
+            } catch(e) {
+                reject(e);
             }
-            
-            // Hapus cache agar data baru muncul
-            sessionStorage.removeItem(CACHE_KEY);
-            
-            setModalOpen(false); 
-            fetchData(true); 
-        } catch(e) {
-            alert(e.message);
-        } 
+        });
+
+        toast.promise(savePromise, {
+            loading: 'Menyimpan...',
+            success: 'Kategori berhasil disimpan!',
+            error: (err) => `Gagal: ${err.message}`,
+        });
     };
 
     return (

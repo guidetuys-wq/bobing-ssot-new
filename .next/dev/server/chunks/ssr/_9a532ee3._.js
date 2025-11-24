@@ -52,7 +52,6 @@ const sortBySize = (variantA, variantB)=>{
 "[project]/app/finance-reports/page.js [app-ssr] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
 
-// app/finance-reports/page.js
 __turbopack_context__.s([
     "default",
     ()=>ReportPLPage
@@ -69,6 +68,9 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$
 ;
 ;
 ;
+// Konfigurasi Cache
+const CACHE_PREFIX = 'lumina_report_';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 function ReportPLPage() {
     const [data, setData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useState"])({
         revenue: 0,
@@ -81,13 +83,30 @@ function ReportPLPage() {
         start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
         end: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0]
     });
-    const generateReport = async ()=>{
+    // Generate Report (Smart Caching)
+    const generateReport = async (forceRefresh = false)=>{
         setLoading(true);
-        const start = new Date(range.start);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(range.end);
-        end.setHours(23, 59, 59, 999);
+        // 1. Generate Cache Key berdasarkan Tanggal
+        const cacheKey = `${CACHE_PREFIX}${range.start}_${range.end}`;
         try {
+            // 2. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) {
+                    const { data: cachedData, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setData(cachedData);
+                        setLoading(false);
+                        return; // Hemat Reads
+                    }
+                }
+            }
+            // 3. Fetch Data Real-time
+            const start = new Date(range.start);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(range.end);
+            end.setHours(23, 59, 59, 999);
+            // A. Sales (Revenue & COGS)
             const qSales = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["query"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["db"], "sales_orders"), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["where"])("order_date", ">=", start), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["where"])("order_date", "<=", end));
             const snapSales = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getDocs"])(qSales);
             let rev = 0, cogs = 0;
@@ -96,6 +115,7 @@ function ReportPLPage() {
                 rev += s.net_amount || 0;
                 cogs += s.total_cost || 0;
             });
+            // B. Expenses (Cash Out)
             const qExp = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["query"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["db"], "cash_transactions"), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["where"])("date", ">=", start), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["where"])("date", "<=", end), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["where"])("type", "==", "out"));
             const snapExp = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$node$2e$mjs__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["getDocs"])(qExp);
             let expTotal = 0;
@@ -108,17 +128,24 @@ function ReportPLPage() {
             snapExp.forEach((d)=>{
                 const t = d.data();
                 const cat = (t.category || 'Lainnya').toLowerCase();
+                // Filter kategori yang bukan expense operasional
                 if (!exclude.includes(cat)) {
                     expTotal += t.amount;
                     expDet[cat] = (expDet[cat] || 0) + t.amount;
                 }
             });
-            setData({
+            const reportData = {
                 revenue: rev,
                 cogs: cogs,
                 expenses: expTotal,
                 details: expDet
-            });
+            };
+            setData(reportData);
+            // 4. Simpan Cache
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+                data: reportData,
+                timestamp: Date.now()
+            }));
         } catch (e) {
             console.error(e);
         } finally{
@@ -127,7 +154,7 @@ function ReportPLPage() {
     };
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["useEffect"])(()=>{
         generateReport();
-    }, []);
+    }, []); // Load awal
     const gross = data.revenue - data.cogs;
     const net = gross - data.expenses;
     const margin = data.revenue > 0 ? net / data.revenue * 100 : 0;
@@ -144,7 +171,7 @@ function ReportPLPage() {
                                 children: "Profit & Loss"
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 50,
+                                lineNumber: 111,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -152,13 +179,13 @@ function ReportPLPage() {
                                 children: "Financial performance summary."
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 51,
+                                lineNumber: 112,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 49,
+                        lineNumber: 110,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -174,7 +201,7 @@ function ReportPLPage() {
                                     })
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 54,
+                                lineNumber: 115,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -182,7 +209,7 @@ function ReportPLPage() {
                                 children: "-"
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 55,
+                                lineNumber: 116,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("input", {
@@ -195,28 +222,38 @@ function ReportPLPage() {
                                     })
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 56,
+                                lineNumber: 117,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
-                                onClick: generateReport,
+                                onClick: ()=>generateReport(false),
                                 className: "btn-gold px-4 py-1 text-xs",
                                 children: loading ? '...' : 'Filter'
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 57,
+                                lineNumber: 120,
+                                columnNumber: 21
+                            }, this),
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                onClick: ()=>generateReport(true),
+                                className: "btn-ghost-dark px-3 py-1 text-xs border-l border-lumina-border ml-1",
+                                title: "Force Refresh",
+                                children: "↻"
+                            }, void 0, false, {
+                                fileName: "[project]/app/finance-reports/page.js",
+                                lineNumber: 125,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 53,
+                        lineNumber: 114,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/finance-reports/page.js",
-                lineNumber: 48,
+                lineNumber: 109,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -226,7 +263,7 @@ function ReportPLPage() {
                         className: "absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 bg-gradient-to-r from-transparent via-lumina-gold to-transparent opacity-50"
                     }, void 0, false, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 63,
+                        lineNumber: 133,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -236,7 +273,7 @@ function ReportPLPage() {
                                 children: "Revenue"
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 67,
+                                lineNumber: 137,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -247,7 +284,7 @@ function ReportPLPage() {
                                         children: "Net Sales"
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 69,
+                                        lineNumber: 139,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -255,19 +292,19 @@ function ReportPLPage() {
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatRupiah"])(data.revenue)
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 70,
+                                        lineNumber: 140,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 68,
+                                lineNumber: 138,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 66,
+                        lineNumber: 136,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -277,7 +314,7 @@ function ReportPLPage() {
                                 children: "Cost of Goods Sold"
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 76,
+                                lineNumber: 146,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -288,7 +325,7 @@ function ReportPLPage() {
                                         children: "HPP Product"
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 78,
+                                        lineNumber: 148,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -300,19 +337,19 @@ function ReportPLPage() {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 79,
+                                        lineNumber: 149,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 77,
+                                lineNumber: 147,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 75,
+                        lineNumber: 145,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -323,7 +360,7 @@ function ReportPLPage() {
                                 children: "Gross Profit"
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 85,
+                                lineNumber: 155,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -331,13 +368,13 @@ function ReportPLPage() {
                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatRupiah"])(gross)
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 86,
+                                lineNumber: 156,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 84,
+                        lineNumber: 154,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -347,7 +384,7 @@ function ReportPLPage() {
                                 children: "Operating Expenses"
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 91,
+                                lineNumber: 161,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -361,7 +398,7 @@ function ReportPLPage() {
                                                     children: k
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/finance-reports/page.js",
-                                                    lineNumber: 95,
+                                                    lineNumber: 165,
                                                     columnNumber: 33
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -369,13 +406,13 @@ function ReportPLPage() {
                                                     children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatRupiah"])(v)
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/finance-reports/page.js",
-                                                    lineNumber: 96,
+                                                    lineNumber: 166,
                                                     columnNumber: 33
                                                 }, this)
                                             ]
                                         }, k, true, {
                                             fileName: "[project]/app/finance-reports/page.js",
-                                            lineNumber: 94,
+                                            lineNumber: 164,
                                             columnNumber: 29
                                         }, this)),
                                     data.expenses === 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -383,13 +420,13 @@ function ReportPLPage() {
                                         children: "No expenses recorded."
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 99,
+                                        lineNumber: 169,
                                         columnNumber: 49
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 92,
+                                lineNumber: 162,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -400,7 +437,7 @@ function ReportPLPage() {
                                         children: "Total Expenses"
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 102,
+                                        lineNumber: 172,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -412,19 +449,19 @@ function ReportPLPage() {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 103,
+                                        lineNumber: 173,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 101,
+                                lineNumber: 171,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 90,
+                        lineNumber: 160,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -438,7 +475,7 @@ function ReportPLPage() {
                                         children: "Net Profit"
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 110,
+                                        lineNumber: 180,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -446,13 +483,13 @@ function ReportPLPage() {
                                         children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["formatRupiah"])(net)
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 111,
+                                        lineNumber: 181,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 109,
+                                lineNumber: 179,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -463,7 +500,7 @@ function ReportPLPage() {
                                         children: "Net Margin"
                                     }, void 0, false, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 114,
+                                        lineNumber: 184,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -474,38 +511,38 @@ function ReportPLPage() {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/finance-reports/page.js",
-                                        lineNumber: 115,
+                                        lineNumber: 185,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 113,
+                                lineNumber: 183,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: `absolute -right-10 -bottom-10 w-48 h-48 rounded-full blur-3xl opacity-10 ${net >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`
                             }, void 0, false, {
                                 fileName: "[project]/app/finance-reports/page.js",
-                                lineNumber: 119,
+                                lineNumber: 189,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/finance-reports/page.js",
-                        lineNumber: 108,
+                        lineNumber: 178,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/finance-reports/page.js",
-                lineNumber: 61,
+                lineNumber: 131,
                 columnNumber: 13
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/finance-reports/page.js",
-        lineNumber: 46,
+        lineNumber: 107,
         columnNumber: 9
     }, this);
 }
