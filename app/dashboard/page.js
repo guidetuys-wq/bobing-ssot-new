@@ -5,14 +5,16 @@ import { collection, getDocs, query, where, orderBy, getAggregateFromServer, sum
 import { formatRupiah } from '@/lib/utils';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, BarElement } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
+import PageHeader from '@/components/PageHeader'; // Komponen UI Baru
+import Skeleton from '@/components/Skeleton'; // Komponen Loading Baru
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, ArcElement);
 
-// --- KONFIGURASI CACHE (OPTIMIZED) ---
+// --- KONFIGURASI CACHE (HEMAT BIAYA) ---
 const CACHE_MASTER_KEY = 'lumina_dash_master_v3'; 
 const CACHE_SALES_PREFIX = 'lumina_dash_sales_v3_'; 
-const CACHE_DURATION_MASTER = 30 * 60 * 1000;
-const CACHE_DURATION_SALES = 5 * 60 * 1000;
+const CACHE_DURATION_MASTER = 30 * 60 * 1000; // 30 Menit
+const CACHE_DURATION_SALES = 5 * 60 * 1000;   // 5 Menit
 
 export default function Dashboard() {
     const [loading, setLoading] = useState(true);
@@ -20,7 +22,6 @@ export default function Dashboard() {
     
     // Data States
     const [masterData, setMasterData] = useState(null);
-    const [inventoryStats, setInventoryStats] = useState({ total_value: 0, total_qty: 0 });
     
     // UI States
     const [kpi, setKpi] = useState({ gross: 0, net: 0, profit: 0, margin: 0, cash: 0, inventoryAsset: 0, txCount: 0 });
@@ -30,7 +31,7 @@ export default function Dashboard() {
     const [lowStockItems, setLowStockItems] = useState([]);
     const [recentSales, setRecentSales] = useState([]);
 
-    // 1. Fetch Master Data (Optimized & Aggregated)
+    // 1. Fetch Master Data (Optimized: Aggregation + LocalStorage)
     const fetchMasterData = async () => {
         // Cek Cache LocalStorage
         if (typeof window !== 'undefined') {
@@ -41,20 +42,18 @@ export default function Dashboard() {
             }
         }
 
-        // COST OPTIMIZATION:
-        // 1. Cash Balance via Aggregation (1 Read)
+        // A. Cash Balance via Aggregation (1 Read)
         const cashAggPromise = getAggregateFromServer(collection(db, "cash_accounts"), {
             totalBalance: sum('balance')
         });
 
-        // 2. Inventory Stats via Cloud Function Aggregation Doc (1 Read)
-        // Menggantikan pengambilan ribuan stock_snapshots
+        // B. Inventory Stats via Cloud Function Aggregation Doc (1 Read)
         const invStatsPromise = getDoc(doc(db, "stats_inventory", "general"));
 
-        // 3. Low Stock Items via Query (Hanya ambil yg < 5, limit 10)
+        // C. Low Stock Items via Query (Hanya ambil yg <= 5, limit 10) - Hemat Reads
         const lowStockPromise = getDocs(query(collection(db, "stock_snapshots"), where("qty", "<=", 5), limit(10)));
 
-        // 4. Master Products & Variants (Tetap butuh untuk mapping nama)
+        // D. Master Products & Variants (Untuk mapping nama)
         const productsPromise = getDocs(collection(db, "products"));
         const variantsPromise = getDocs(collection(db, "product_variants"));
 
@@ -69,8 +68,8 @@ export default function Dashboard() {
         // Process Data
         const cashBalance = snapCashAgg.data().totalBalance || 0;
         
+        // Ambil data Inventory Value langsung dari dokumen stat (hasil kerja Cloud Function)
         const invData = snapInvStats.exists() ? snapInvStats.data() : { total_value: 0, total_qty: 0 };
-        setInventoryStats(invData);
 
         const products = [];
         snapProd.forEach(d => products.push({ id: d.id, name: d.data().name }));
@@ -103,8 +102,10 @@ export default function Dashboard() {
         return result;
     };
 
+    // 2. Fetch Sales Data (Optimized Cache)
     const fetchSalesData = async (range) => {
         const cacheKey = `${CACHE_SALES_PREFIX}${range}`;
+        
         if (typeof window !== 'undefined') {
             const cached = localStorage.getItem(cacheKey);
             if (cached) {
@@ -130,16 +131,25 @@ export default function Dashboard() {
 
         const q = query(collection(db, "sales_orders"), where("order_date", ">=", start), where("order_date", "<=", end), orderBy("order_date", "asc"));
         const snap = await getDocs(q);
+        
         const sales = [];
         snap.forEach(d => {
             const data = d.data();
-            sales.push({ id: d.id, ...data, order_date: data.order_date.toDate() });
+            sales.push({
+                id: d.id,
+                ...data,
+                order_date: data.order_date.toDate()
+            });
         });
 
-        if (typeof window !== 'undefined') localStorage.setItem(cacheKey, JSON.stringify({ data: sales, ts: Date.now() }));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(cacheKey, JSON.stringify({ data: sales, ts: Date.now() }));
+        }
+        
         return sales;
     };
 
+    // 3. Main Orchestrator
     useEffect(() => {
         const loadDashboard = async () => {
             setLoading(true);
@@ -149,13 +159,21 @@ export default function Dashboard() {
                     currentMaster = await fetchMasterData();
                     setMasterData(currentMaster);
                 }
+
                 const sales = await fetchSalesData(filterRange);
                 processDashboard(sales, currentMaster);
-            } catch (e) { console.error(e); } finally { setLoading(false); }
+
+            } catch (e) {
+                console.error("Dashboard Error:", e);
+            } finally {
+                setLoading(false);
+            }
         };
+
         loadDashboard();
     }, [filterRange]);
 
+    // 4. Calculation Logic
     const processDashboard = (sales, master) => {
         if (!master) return;
 
@@ -186,16 +204,27 @@ export default function Dashboard() {
                 });
             }
 
-            recentList.push({ id: d.order_number, customer: d.customer_name, amount: d.gross_amount, status: d.payment_status, time: d.order_date });
+            recentList.push({ 
+                id: d.order_number, 
+                customer: d.customer_name, 
+                amount: d.gross_amount, 
+                status: d.payment_status, 
+                time: d.order_date 
+            });
         });
 
         const profit = totalNet - totalCost;
         const margin = totalGross > 0 ? (profit / totalGross) * 100 : 0;
 
         setKpi({ 
-            gross: totalGross, net: totalNet, profit: profit, margin: margin.toFixed(1), txCount: sales.length, 
+            gross: totalGross, 
+            net: totalNet, 
+            profit: profit, 
+            margin: margin.toFixed(1), 
+            txCount: sales.length, 
             cash: master.cashBalance, 
-            inventoryAsset: master.invStats.total_value // Mengambil langsung dari Cloud Function result
+            // AMBIL DARI STATS CLOUD FUNCTION, BUKAN HITUNG MANUAL
+            inventoryAsset: master.invStats ? master.invStats.total_value : 0 
         });
 
         setChartTrendData({
@@ -212,17 +241,18 @@ export default function Dashboard() {
         });
 
         setTopProducts(Object.entries(prodStats).sort((a, b) => b[1] - a[1]).slice(0, 5));
-        setLowStockItems(master.lowStocks || []); // Menggunakan low stock dari query spesifik
+        setLowStockItems(master.lowStocks || []); 
         setRecentSales(recentList.reverse().slice(0, 5));
     };
 
+    // --- UI COMPONENTS ---
     const KpiCard = ({ title, value, sub, icon, color, loading }) => (
         <div className="card-luxury p-6 relative overflow-hidden group hover:border-lumina-gold/30 transition-all">
             <div className="flex justify-between items-start relative z-10">
                 <div>
                     <p className="text-[10px] font-bold text-lumina-muted uppercase tracking-widest mb-1">{title}</p>
-                    <h3 className="text-2xl font-display font-bold text-lumina-text tracking-tight">
-                        {loading ? <div className="h-8 w-32 bg-lumina-highlight rounded animate-pulse"></div> : value}
+                    <h3 className="text-2xl font-display font-bold text-white tracking-tight">
+                        {loading ? <Skeleton className="h-8 w-32" /> : value}
                     </h3>
                     <p className="text-xs text-lumina-muted mt-2 font-medium">{sub}</p>
                 </div>
@@ -236,69 +266,81 @@ export default function Dashboard() {
 
     return (
         <div className="space-y-8 fade-in pb-20">
-            <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
-                <div>
-                    <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text tracking-tight">Executive Dashboard</h2>
-                    <p className="text-sm text-lumina-muted mt-1 font-light">Real-time business intelligence & analytics.</p>
-                </div>
-                <div className="bg-lumina-surface p-1 rounded-lg border border-lumina-border shadow-lg">
-                    <select value={filterRange} onChange={(e) => setFilterRange(e.target.value)} className="text-sm bg-transparent text-lumina-text font-medium cursor-pointer py-1.5 pl-3 pr-8 outline-none">
+            
+            {/* Header menggunakan Component Baru */}
+            <PageHeader 
+                title="Executive Dashboard" 
+                subtitle="Real-time business intelligence & analytics."
+            >
+                <div className="w-full md:w-auto bg-lumina-surface p-1 rounded-xl border border-lumina-border shadow-lg">
+                    <select 
+                        value={filterRange} 
+                        onChange={(e) => setFilterRange(e.target.value)} 
+                        className="w-full md:w-auto text-sm bg-transparent text-lumina-text font-medium cursor-pointer py-2 px-4 outline-none appearance-none text-center"
+                    >
                         <option value="today" className="bg-lumina-base">Hari Ini</option>
                         <option value="this_month" className="bg-lumina-base">Bulan Ini</option>
                         <option value="last_month" className="bg-lumina-base">Bulan Lalu</option>
                     </select>
                 </div>
-            </div>
+            </PageHeader>
 
+            {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <KpiCard title="Total Revenue" value={formatRupiah(kpi.gross)} sub={`${kpi.txCount} Transactions`} color="gold" icon={<svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>} loading={loading} />
                 <KpiCard title="Net Profit" value={formatRupiah(kpi.profit)} sub={`Margin ${kpi.margin}%`} color="emerald" icon={<svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>} loading={loading} />
                 <KpiCard title="Liquid Cash" value={formatRupiah(kpi.cash)} sub="All Wallets" color="blue" icon={<svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>} loading={loading} />
-                <KpiCard title="Inventory Value" value={formatRupiah(kpi.inventoryAsset)} sub="Cloud Aggregated (Live)" color="amber" icon={<svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>} loading={loading} />
+                <KpiCard title="Inventory Value" value={formatRupiah(kpi.inventoryAsset)} sub="Cloud Aggregated" color="amber" icon={<svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>} loading={loading} />
             </div>
 
+            {/* Charts Area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 card-luxury p-6">
-                    <h3 className="font-bold text-lumina-text mb-6">Performance Trend</h3>
+                    <h3 className="font-bold text-white mb-6">Performance Trend</h3>
                     <div className="h-72 w-full relative">
-                        {chartTrendData ? <Line data={chartTrendData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94A3B8' } } }, scales: { y: { grid: { color: '#2A2E3B' }, ticks: { color: '#94A3B8' } }, x: { grid: { display: false }, ticks: { color: '#94A3B8' } } } }} /> : <div className="h-full flex items-center justify-center text-lumina-muted">Loading Chart...</div>}
+                        {chartTrendData ? <Line data={chartTrendData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#94A3B8' } } }, scales: { y: { grid: { color: '#2A2E3B' }, ticks: { color: '#94A3B8' } }, x: { grid: { display: false }, ticks: { color: '#94A3B8' } } } }} /> : <Skeleton className="h-full w-full" />}
                     </div>
                 </div>
                 <div className="card-luxury p-6 flex flex-col">
-                    <h3 className="font-bold text-lumina-text mb-6">Channel Mix</h3>
+                    <h3 className="font-bold text-white mb-6">Channel Mix</h3>
                     <div className="h-64 w-full relative flex justify-center items-center flex-1">
-                         {chartChannelData ? <Doughnut data={chartChannelData} options={{ responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8' } } } }} /> : <div className="text-lumina-muted">Loading Data...</div>}
+                         {chartChannelData ? <Doughnut data={chartChannelData} options={{ responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8' } } } }} /> : <Skeleton className="h-48 w-48 rounded-full" />}
                     </div>
                 </div>
             </div>
 
+            {/* Tables */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Top Products */}
                 <div className="card-luxury overflow-hidden">
-                    <div className="px-6 py-4 border-b border-lumina-border bg-lumina-surface">
-                        <h3 className="font-bold text-lumina-text text-sm uppercase tracking-wider">🔥 Top Products</h3>
+                    <div className="px-6 py-4 border-b border-lumina-border bg-[#12141C]">
+                        <h3 className="font-bold text-white text-sm uppercase tracking-wider">🔥 Top Products</h3>
                     </div>
-                    <table className="table-dark">
-                        <tbody>
-                            {topProducts.map(([sku, qty], i) => (
-                                <tr key={i} className="hover:bg-lumina-highlight">
-                                    <td className="px-6 py-3 font-medium text-lumina-text">{sku}</td>
-                                    <td className="px-6 py-3 text-right font-bold text-lumina-gold">{qty}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                        <table className="table-dark w-full">
+                            <tbody>
+                                {topProducts.map(([sku, qty], i) => (
+                                    <tr key={i} className="hover:bg-lumina-highlight">
+                                        <td className="px-6 py-3 font-medium text-white">{sku}</td>
+                                        <td className="px-6 py-3 text-right font-bold text-lumina-gold">{qty}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
+                {/* Low Stock */}
                 <div className="card-luxury overflow-hidden border-rose-900/30">
                     <div className="px-6 py-4 border-b border-rose-900/30 bg-rose-900/10 flex justify-between items-center">
-                        <h3 className="font-bold text-rose-400 text-sm uppercase tracking-wider">⚠️ Low Stock (Top 10)</h3>
+                        <h3 className="font-bold text-rose-400 text-sm uppercase tracking-wider">⚠️ Low Stock</h3>
                         <span className="text-[10px] bg-rose-900/20 border border-rose-900/30 text-rose-400 px-2 py-0.5 rounded">{lowStockItems.length} Items</span>
                     </div>
-                    <div className="divide-y divide-lumina-border">
+                    <div className="divide-y divide-lumina-border max-h-[300px] overflow-y-auto">
                         {lowStockItems.map((item, i) => (
                             <div key={i} className="px-6 py-3 flex justify-between items-center hover:bg-lumina-highlight transition">
                                 <div>
-                                    <p className="text-sm font-bold text-lumina-text">{item.sku}</p>
+                                    <p className="text-sm font-bold text-white">{item.sku}</p>
                                     <p className="text-xs text-lumina-muted truncate w-32">{item.name}</p>
                                 </div>
                                 <div className="text-right">
@@ -310,19 +352,20 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Recent Sales */}
                 <div className="card-luxury overflow-hidden">
-                    <div className="px-6 py-4 border-b border-lumina-border bg-lumina-surface">
-                        <h3 className="font-bold text-lumina-text text-sm uppercase tracking-wider">⚡ Recent Sales</h3>
+                    <div className="px-6 py-4 border-b border-lumina-border bg-[#12141C]">
+                        <h3 className="font-bold text-white text-sm uppercase tracking-wider">⚡ Recent Sales</h3>
                     </div>
-                    <div className="divide-y divide-lumina-border">
+                    <div className="divide-y divide-lumina-border max-h-[300px] overflow-y-auto">
                         {recentSales.map((s, i) => (
                             <div key={i} className="px-6 py-3 flex justify-between items-center hover:bg-lumina-highlight transition">
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <span className="font-bold text-lumina-text text-sm">{s.customer}</span>
+                                        <span className="font-bold text-white text-sm">{s.customer}</span>
                                         <span className="text-[10px] bg-lumina-highlight text-lumina-muted px-1.5 rounded">{s.id}</span>
                                     </div>
-                                    <p className="text-[10px] text-lumina-muted">{s.time.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</p>
+                                    <p className="text-[10px] text-lumina-muted">{s.time ? s.time.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) : '-'}</p>
                                 </div>
                                 <span className="font-bold text-lumina-gold text-sm">{formatRupiah(s.amount)}</span>
                             </div>

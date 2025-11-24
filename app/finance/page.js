@@ -1,5 +1,6 @@
 "use client";
 import TabsLayout from '@/components/TabsLayout';
+import { ProfitLossIcon, BalanceSheetIcon, CashFlowIcon, ChartOfAccountsIcon } from '@/components/DashboardIcons';
 import CashFlowPage from '../cash/page';
 import ReportPLPage from '../finance-reports/page';
 import BalanceSheetPage from '../finance-balance/page';
@@ -7,10 +8,10 @@ import FinanceAccountsPage from '../finance-accounts/page';
 
 export default function FinanceCenter() {
   const tabs = [
-    { id: 'dashboard', label: '📊 Laba Rugi' },
-    { id: 'balance', label: '⚖️ Neraca' },
-    { id: 'cash', label: '💸 Arus Kas' },
-    { id: 'accounts', label: '📒 Chart of Accounts' },
+    { id: 'dashboard', label: <span className="flex items-center gap-2"><ProfitLossIcon /> Laba Rugi</span> },
+    { id: 'balance', label: <span className="flex items-center gap-2"><BalanceSheetIcon /> Neraca</span> },
+    { id: 'cash', label: <span className="flex items-center gap-2"><CashFlowIcon /> Arus Kas</span> },
+    { id: 'accounts', label: <span className="flex items-center gap-2"><ChartOfAccountsIcon  /> Chart of Accounts</span> },
   ];
 
   return (

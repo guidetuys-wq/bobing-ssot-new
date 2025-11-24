@@ -1,16 +1,17 @@
 "use client";
 import TabsLayout from '@/components/TabsLayout';
-import ProductsPage from '../products/page'; // Import file page lama sebagai komponen
+import { ProductsIcon, VariantsIcon, CategoriesIcon, BrandsIcon } from '@/components/DashboardIcons';
+import ProductsPage from '../products/page';
 import VariantsPage from '../variants/page';
 import CategoriesPage from '../categories/page';
 import BrandsPage from '../brands/page';
 
 export default function MasterDataCenter() {
   const tabs = [
-    { id: 'products', label: '📦 Produk' },
-    { id: 'variants', label: '🏷️ Varian SKU' },
-    { id: 'categories', label: '📂 Kategori' },
-    { id: 'brands', label: '✨ Brands' },
+    { id: 'products', label: <span className="flex items-center gap-2"><ProductsIcon /> Produk</span> },
+    { id: 'variants', label: <span className="flex items-center gap-2"><VariantsIcon /> Varian SKU</span> },
+    { id: 'categories', label: <span className="flex items-center gap-2"><CategoriesIcon /> Kategori</span> },
+    { id: 'brands', label: <span className="flex items-center gap-2"><BrandsIcon /> Brands</span> },
   ];
 
   return (

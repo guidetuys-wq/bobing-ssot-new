@@ -7,8 +7,8 @@ import toast from 'react-hot-toast';
 
 // --- KONFIGURASI CACHE (OPTIMIZED) ---
 const CACHE_KEY = 'lumina_brands_v2';
-const CACHE_KEY_PRODUCTS = 'lumina_products_data_v2'; // Reuse cache dari Products Page
-const CACHE_DURATION = 60 * 60 * 1000; // 60 Menit (Master data jarang berubah)
+const CACHE_KEY_PRODUCTS = 'lumina_products_data_v2';
+const CACHE_DURATION = 60 * 60 * 1000;
 
 export default function BrandsPage() {
     const [brands, setBrands] = useState([]);
@@ -16,16 +16,12 @@ export default function BrandsPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
 
-    useEffect(() => { 
-        fetchData(); 
-    }, []);
+    useEffect(() => { fetchData(); }, []);
 
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
         try {
             let data = null;
-
-            // 1. Cek Cache LocalStorage (Prioritas 1: Cache Sendiri)
             if (!forceRefresh && typeof window !== 'undefined') {
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
@@ -36,13 +32,11 @@ export default function BrandsPage() {
                 }
             }
 
-            // 2. Cek Cache Produk (Prioritas 2: Reuse dari halaman Products - Hemat Biaya)
             if (!data && !forceRefresh && typeof window !== 'undefined') {
                 const cachedProds = localStorage.getItem(CACHE_KEY_PRODUCTS);
                 if (cachedProds) {
                     try {
                         const parsed = JSON.parse(cachedProds);
-                        // Struktur cache products biasanya: { brands: [], categories: [], products: [], ... }
                         if (parsed.brands && parsed.brands.length > 0 && (Date.now() - parsed.timestamp < CACHE_DURATION)) {
                             data = parsed.brands;
                         }
@@ -50,28 +44,17 @@ export default function BrandsPage() {
                 }
             }
 
-            // 3. Jika Cache Kosong, Fetch Firebase
             if (!data) {
-                const q = query(
-                    collection(db, "brands"), 
-                    orderBy("name"), 
-                    limit(100) 
-                );
+                const q = query(collection(db, "brands"), orderBy("name"), limit(100));
                 const s = await getDocs(q);
                 data = []; 
                 s.forEach(x => data.push({id:x.id, ...x.data()}));
                 
-                // Simpan ke LocalStorage
                 if (typeof window !== 'undefined') {
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                        data: data,
-                        timestamp: Date.now()
-                    }));
+                    localStorage.setItem(CACHE_KEY, JSON.stringify({ data: data, timestamp: Date.now() }));
                 }
             }
-
             setBrands(data || []);
-
         } catch(e) {
             console.error(e);
             toast.error("Gagal memuat data brands");
@@ -82,7 +65,6 @@ export default function BrandsPage() {
 
     const handleSubmit = async (e) => { 
         e.preventDefault(); 
-        
         const savePromise = new Promise(async (resolve, reject) => {
             try { 
                 if(formData.id) {
@@ -91,79 +73,62 @@ export default function BrandsPage() {
                     await addDoc(collection(db,"brands"), {...formData, created_at: serverTimestamp()}); 
                 }
                 
-                // Invalidate Caches (Hapus cache sendiri DAN cache produk agar konsisten)
                 if (typeof window !== 'undefined') {
                     localStorage.removeItem(CACHE_KEY);
                     localStorage.removeItem(CACHE_KEY_PRODUCTS); 
                 }
-
                 setModalOpen(false); 
                 fetchData(true); 
                 resolve();
-            } catch(e) {
-                reject(e);
-            } 
+            } catch(e) { reject(e); } 
         });
-
-        toast.promise(savePromise, {
-            loading: 'Menyimpan...',
-            success: 'Brand berhasil disimpan!',
-            error: (err) => `Gagal: ${err.message}`,
-        });
+        toast.promise(savePromise, { loading: 'Menyimpan...', success: 'Brand berhasil disimpan!', error: (err) => `Gagal: ${err.message}` });
     };
 
     return (
-        <div className="max-w-5xl mx-auto space-y-6 fade-in">
-            <div className="flex justify-between items-center">
-            <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Brands</h2>
-            <button onClick={() => { setFormData({ name:'', type:'own_brand' }); setModalOpen(true); }} className="btn-gold">
-                Add Brand
-            </button>
-        </div>
-
+        <div className="max-w-5xl mx-auto space-y-6 fade-in pb-20">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Brands</h2>
+                <button onClick={() => { setFormData({ name:'', type:'own_brand' }); setModalOpen(true); }} className="btn-gold w-full sm:w-auto">
+                    Add Brand
+                </button>
+            </div>
             
             <div className="card-luxury overflow-hidden">
-                <table className="table-dark w-full">
-                    <thead>
-                        <tr>
-                            <th className="pl-6">Name</th>
-                            <th>Type</th>
-                            <th className="text-right pr-6">Act</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr><td colSpan="3" className="text-center py-4 text-lumina-muted">Loading...</td></tr>
-                        ) : brands.map(b => (
-                            <tr key={b.id}>
-                                <td className="pl-6 text-white font-medium">{b.name}</td>
-                                <td><span className="badge-luxury badge-neutral">{b.type}</span></td>
-                                <td className="text-right pr-6">
-                                    <button onClick={()=>{setFormData({...b}); setModalOpen(true)}} className="text-xs text-lumina-gold">Edit</button>
-                                </td>
+                <div className="overflow-x-auto">
+                    <table className="table-dark w-full min-w-[400px]">
+                        <thead>
+                            <tr>
+                                <th className="pl-6">Name</th>
+                                <th>Type</th>
+                                <th className="text-right pr-6">Act</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan="3" className="text-center py-4 text-lumina-muted">Loading...</td></tr>
+                            ) : brands.map(b => (
+                                <tr key={b.id}>
+                                    <td className="pl-6 text-white font-medium">{b.name}</td>
+                                    <td><span className="badge-luxury badge-neutral">{b.type}</span></td>
+                                    <td className="text-right pr-6">
+                                        <button onClick={()=>{setFormData({...b}); setModalOpen(true)}} className="text-xs text-lumina-gold">Edit</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <Portal>
                 {modalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 fade-in">
                         <div className="bg-lumina-surface border border-lumina-border rounded-2xl p-6 w-full max-w-sm">
                             <h3 className="text-lg font-bold text-white mb-4">Brand Form</h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
-                                <input 
-                                    className="input-luxury" 
-                                    placeholder="Brand Name" 
-                                    value={formData.name} 
-                                    onChange={e=>setFormData({...formData,name:e.target.value})}
-                                />
-                                <select 
-                                    className="input-luxury" 
-                                    value={formData.type} 
-                                    onChange={e=>setFormData({...formData,type:e.target.value})}
-                                >
+                                <input className="input-luxury" placeholder="Brand Name" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} />
+                                <select className="input-luxury" value={formData.type} onChange={e=>setFormData({...formData,type:e.target.value})}>
                                     <option value="own_brand">Own Brand</option>
                                     <option value="supplier_brand">Supplier</option>
                                 </select>

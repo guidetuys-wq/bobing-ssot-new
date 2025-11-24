@@ -6,8 +6,8 @@ import { Portal } from '@/lib/usePortal';
 import toast from 'react-hot-toast';
 
 // --- KONFIGURASI CACHE (OPTIMIZED) ---
-const CACHE_KEY = 'lumina_categories_v2'; // Key baru untuk versi optimized
-const CACHE_DURATION = 60 * 60 * 1000; // 60 Menit (Data kategori sangat jarang berubah)
+const CACHE_KEY = 'lumina_categories_v2';
+const CACHE_DURATION = 60 * 60 * 1000;
 
 export default function CategoriesPage() {
     const [data, setData] = useState([]);
@@ -15,9 +15,7 @@ export default function CategoriesPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
 
-    useEffect(() => { 
-        fetchData(); 
-    }, []);
+    useEffect(() => { fetchData(); }, []);
 
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
@@ -36,24 +34,15 @@ export default function CategoriesPage() {
             }
 
             // 2. Fetch Data dari Firebase
-            const q = query(
-                collection(db, "categories"), 
-                orderBy("name"),
-                limit(100)
-            );
-            
+            const q = query(collection(db, "categories"), orderBy("name"), limit(100));
             const s = await getDocs(q);
             const d = []; 
             s.forEach(x => d.push({id:x.id, ...x.data()}));
             
             setData(d);
             
-            // 3. Simpan Cache ke LocalStorage
             if (typeof window !== 'undefined') {
-                localStorage.setItem(CACHE_KEY, JSON.stringify({
-                    data: d,
-                    timestamp: Date.now()
-                }));
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ data: d, timestamp: Date.now() }));
             }
 
         } catch(e) {
@@ -66,7 +55,6 @@ export default function CategoriesPage() {
 
     const handleSubmit = async (e) => { 
         e.preventDefault(); 
-        
         const savePromise = new Promise(async (resolve, reject) => {
             try { 
                 if(formData.id) {
@@ -75,81 +63,61 @@ export default function CategoriesPage() {
                     await addDoc(collection(db,"categories"), {...formData, created_at: serverTimestamp()});
                 }
                 
-                // Invalidate Cache LocalStorage saat ada perubahan
-                if (typeof window !== 'undefined') {
-                    localStorage.removeItem(CACHE_KEY);
-                    // Opsional: Jika ingin refresh cache produk juga (karena ada relasi nama kategori)
-                    // localStorage.removeItem('lumina_products_data_v2'); 
-                }
-
+                if (typeof window !== 'undefined') localStorage.removeItem(CACHE_KEY);
                 setModalOpen(false); 
                 fetchData(true); 
                 resolve();
-            } catch(e) {
-                reject(e);
-            }
+            } catch(e) { reject(e); }
         });
-
-        toast.promise(savePromise, {
-            loading: 'Menyimpan...',
-            success: 'Kategori berhasil disimpan!',
-            error: (err) => `Gagal: ${err.message}`,
-        });
+        toast.promise(savePromise, { loading: 'Menyimpan...', success: 'Kategori berhasil disimpan!', error: (err) => `Gagal: ${err.message}` });
     };
 
     const handleDelete = async (id) => {
         if(!confirm("Hapus kategori ini?")) return;
-        
         const deletePromise = new Promise(async (resolve, reject) => {
             try {
                 await deleteDoc(doc(db, "categories", id));
                 if (typeof window !== 'undefined') localStorage.removeItem(CACHE_KEY);
                 fetchData(true);
                 resolve();
-            } catch(e) {
-                reject(e);
-            }
+            } catch(e) { reject(e); }
         });
-
-        toast.promise(deletePromise, {
-            loading: 'Menghapus...',
-            success: 'Kategori dihapus',
-            error: (err) => `Gagal: ${err.message}`
-        });
+        toast.promise(deletePromise, { loading: 'Menghapus...', success: 'Kategori dihapus', error: (err) => `Gagal: ${err.message}` });
     };
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 fade-in pb-20">
-            <div className="flex justify-between items-center">
-            <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Categories</h2>
-            <button onClick={() => { setFormData({ name:'' }); setModalOpen(true); }} className="btn-gold">
-                Add Category
-            </button>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Categories</h2>
+                <button onClick={() => { setFormData({ name:'' }); setModalOpen(true); }} className="btn-gold w-full sm:w-auto">
+                    Add Category
+                </button>
             </div>
 
-            
             <div className="card-luxury overflow-hidden">
-                <table className="table-dark w-full">
-                    <thead>
-                        <tr>
-                            <th className="pl-6">Category Name</th>
-                            <th className="text-right pr-6">Act</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr><td colSpan="2" className="text-center py-4 text-lumina-muted">Loading...</td></tr>
-                        ) : data.map(c => (
-                            <tr key={c.id}>
-                                <td className="pl-6 text-white font-medium">{c.name}</td>
-                                <td className="text-right pr-6 flex justify-end gap-3 py-3">
-                                    <button onClick={()=>{setFormData({...c}); setModalOpen(true)}} className="text-xs font-bold text-lumina-muted hover:text-white transition-colors">Edit</button>
-                                    <button onClick={()=>handleDelete(c.id)} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Del</button>
-                                </td>
+                <div className="overflow-x-auto">
+                    <table className="table-dark w-full min-w-[300px]">
+                        <thead>
+                            <tr>
+                                <th className="pl-6">Category Name</th>
+                                <th className="text-right pr-6">Act</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr><td colSpan="2" className="text-center py-4 text-lumina-muted">Loading...</td></tr>
+                            ) : data.map(c => (
+                                <tr key={c.id}>
+                                    <td className="pl-6 text-white font-medium">{c.name}</td>
+                                    <td className="text-right pr-6 flex justify-end gap-3 py-3">
+                                        <button onClick={()=>{setFormData({...c}); setModalOpen(true)}} className="text-xs font-bold text-lumina-muted hover:text-white transition-colors">Edit</button>
+                                        <button onClick={()=>handleDelete(c.id)} className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors">Del</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <Portal>

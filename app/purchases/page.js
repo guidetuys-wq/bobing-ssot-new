@@ -293,27 +293,28 @@ export default function PurchasesPage() {
     };
 
     return (
-        <div className="space-y-6 fade-in pb-20">
-            <div className="flex justify-between items-center">
-            <div>
-                <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text tracking-tight">Purchase Orders</h2>
-                <p className="text-sm text-lumina-muted">Manage supplier orders.</p>
-            </div>
-            <div className="flex gap-2">
-                <Link href="/purchases-import" className="btn-ghost-dark">Import</Link>
-                <button
-                onClick={() => { setFormData({ supplier_id:'', warehouse_id:'', date: new Date().toISOString().split('T')[0], isPaid: false}); setCart([]); setModalOpen(true); }}
-                className="btn-gold"
-                >
-                New PO
-                </button>
-            </div>
+        <div className="max-w-4xl mx-auto space-y-6 fade-in pb-20">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h2 className="text-xl md:text-3xl font-display font-bold text-lumina-text tracking-tight">Purchase Orders</h2>
+                    <p className="text-sm text-lumina-muted">Manage supplier orders.</p>
+                </div>
+                <div className="flex gap-2">
+                    <Link href="/purchases-import" className="btn-ghost-dark">Import</Link>
+                    <button
+                        onClick={() => { setFormData({ supplier_id:'', warehouse_id:'', date: new Date().toISOString().split('T')[0], isPaid: false}); setCart([]); setModalOpen(true); }}
+                        className="btn-gold"
+                    >
+                    New PO
+                    </button>
+                </div>
             </div>
 
-
+            {/* Table Wrapper with Scroll */}
             <div className="card-luxury overflow-hidden">
-                <div className="table-wrapper-dark">
-                    <table className="table-dark">
+                <div className="table-wrapper-dark overflow-x-auto">
+                    <table className="table-dark w-full min-w-full">
                         <thead>
                             <tr>
                                 <th className="pl-6">Date</th>
@@ -344,59 +345,77 @@ export default function PurchasesPage() {
                 {/* Modal PO */}
                 {modalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                        <div className="card-luxury w-full max-w-4xl p-6 fade-in-up max-h-[90vh] overflow-y-auto">
-                            <h3 className="text-lg font-bold text-lumina-text mb-4">New Purchase Order</h3>
-                            <form onSubmit={submitPO} className="space-y-4">
-                                <div className="grid grid-cols-3 gap-4">
-                                    <select required className="input-luxury" value={formData.supplier_id} onChange={e => setFormData({...formData, supplier_id: e.target.value})}>
-                                        <option value="">-- Supplier --</option>
-                                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                    <select required className="input-luxury" value={formData.warehouse_id} onChange={e => setFormData({...formData, warehouse_id: e.target.value})}>
-                                        <option value="">-- Warehouse --</option>
-                                        {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                    </select>
-                                    <input type="date" required className="input-luxury" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                        <div className="card-luxury w-full max-w-4xl p-6 fade-in-up max-h-[90vh] overflow-y-auto flex flex-col">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-bold text-lumina-text">New Purchase Order</h3>
+                                <button onClick={() => setModalOpen(false)} className="text-2xl text-lumina-muted hover:text-white">×</button>
+                            </div>
+                            
+                            <form onSubmit={submitPO} className="space-y-4 flex-1 overflow-y-auto">
+                                {/* RESPONSIVE GRID FOR INPUTS */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-lumina-muted mb-1">Supplier</label>
+                                        <select required className="input-luxury" value={formData.supplier_id} onChange={e => setFormData({...formData, supplier_id: e.target.value})}>
+                                            <option value="">-- Select --</option>
+                                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-lumina-muted mb-1">Warehouse</label>
+                                        <select required className="input-luxury" value={formData.warehouse_id} onChange={e => setFormData({...formData, warehouse_id: e.target.value})}>
+                                            <option value="">-- Select --</option>
+                                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-lumina-muted mb-1">Date</label>
+                                        <input type="date" required className="input-luxury" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                                    </div>
                                 </div>
                                 
                                 <div className="bg-lumina-base p-4 rounded-xl border border-lumina-border">
-                                    <div className="grid grid-cols-12 gap-3 items-end">
-                                        <div className="col-span-6">
+                                    {/* ITEM INPUT - RESPONSIVE */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                                        <div className="sm:col-span-6">
                                             <label className="text-xs font-bold text-lumina-muted mb-1 block">Item</label>
-                                            <select className="input-luxury" value={inputItem.variant_id} onChange={e => { const v = variants.find(x=>x.id===e.target.value); setInputItem({...inputItem, variant_id: e.target.value, cost: v?.cost || ''}) }}>
-                                                <option value="">Select</option>
+                                            <select className="input-luxury w-full" value={inputItem.variant_id} onChange={e => { const v = variants.find(x=>x.id===e.target.value); setInputItem({...inputItem, variant_id: e.target.value, cost: v?.cost || ''}) }}>
+                                                <option value="">Select Variant</option>
                                                 {variants.map(v => { const p = products.find(x=>x.id===v.product_id); return <option key={v.id} value={v.id}>{v.sku} - {p?.name} ({v.color}/{v.size})</option> })}
                                             </select>
                                         </div>
-                                        <div className="col-span-2">
+                                        <div className="sm:col-span-2">
                                             <label className="text-xs font-bold text-lumina-muted mb-1 block">Qty</label>
-                                            <input type="number" className="input-luxury" value={inputItem.qty} onChange={e=>setInputItem({...inputItem, qty:e.target.value})} />
+                                            <input type="number" className="input-luxury w-full" placeholder="Qty" value={inputItem.qty} onChange={e=>setInputItem({...inputItem, qty:e.target.value})} />
                                         </div>
-                                        <div className="col-span-3">
+                                        <div className="sm:col-span-3">
                                             <label className="text-xs font-bold text-lumina-muted mb-1 block">Cost</label>
-                                            <input type="number" className="input-luxury" value={inputItem.cost} onChange={e=>setInputItem({...inputItem, cost:e.target.value})} />
+                                            <input type="number" className="input-luxury w-full" placeholder="Cost" value={inputItem.cost} onChange={e=>setInputItem({...inputItem, cost:e.target.value})} />
                                         </div>
-                                        <div className="col-span-1">
-                                            <button type="button" onClick={addItem} className="btn-gold w-full p-2.5">+</button>
+                                        <div className="sm:col-span-1">
+                                            <button type="button" onClick={addItem} className="btn-gold w-full p-2.5 mt-2 sm:mt-0">+</button>
                                         </div>
                                     </div>
                                 </div>
 
+                                {/* CART TABLE - SCROLLABLE */}
                                 <div className="border border-lumina-border rounded-lg overflow-hidden">
-                                    <table className="w-full text-sm text-left text-lumina-text">
-                                        <thead className="bg-lumina-surface text-xs text-lumina-muted uppercase">
-                                            <tr><th className="p-3">Item</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Total</th></tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-lumina-border">
-                                            {cart.map((c, idx) => (
-                                                <tr key={idx}>
-                                                    <td className="p-3">{c.name} <span className="text-xs text-lumina-muted">{c.sku}</span></td>
-                                                    <td className="p-3 text-right">{c.qty}</td>
-                                                    <td className="p-3 text-right font-mono">{formatRupiah(c.qty*c.unit_cost)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left text-lumina-text min-w-[400px]">
+                                            <thead className="bg-lumina-surface text-xs text-lumina-muted uppercase">
+                                                <tr><th className="p-3">Item</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Total</th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-lumina-border">
+                                                {cart.map((c, idx) => (
+                                                    <tr key={idx}>
+                                                        <td className="p-3">{c.name} <span className="text-xs text-lumina-muted block sm:inline sm:ml-1">{c.sku}</span></td>
+                                                        <td className="p-3 text-right">{c.qty}</td>
+                                                        <td className="p-3 text-right font-mono">{formatRupiah(c.qty*c.unit_cost)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
 
                                 <div className="flex items-center gap-3 bg-amber-900/20 p-3 rounded-xl border border-amber-900/50">
@@ -416,33 +435,35 @@ export default function PurchasesPage() {
                 {/* Modal Detail */}
                 {detailOpen && selectedPO && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                        <div className="card-luxury w-full max-w-2xl p-6 fade-in-up">
+                        <div className="card-luxury w-full max-w-2xl p-6 fade-in-up max-h-[90vh] overflow-y-auto">
                             <div className="flex justify-between mb-4">
                                 <h3 className="text-lg font-bold text-lumina-text">PO Details</h3>
                                 <button onClick={()=>setDetailOpen(false)} className="text-lumina-muted">✕</button>
                             </div>
                             <div className="space-y-4">
-                                <div className="flex justify-between text-sm border-b border-lumina-border pb-3">
+                                <div className="flex flex-col sm:flex-row justify-between text-sm border-b border-lumina-border pb-3 gap-2">
                                     <span className="text-lumina-muted">Supplier: <strong className="text-white">{selectedPO.supplier_name}</strong></span>
                                     <span className="text-lumina-muted">Status: <strong className="text-white uppercase">{selectedPO.payment_status}</strong></span>
                                 </div>
-                                <table className="w-full text-sm text-lumina-text">
-                                    <thead className="bg-lumina-base text-lumina-muted">
-                                        <tr><th className="p-2 text-left">Product</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Subtotal</th></tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-lumina-border">
-                                        {poItems.map((i, idx) => (
-                                            <tr key={idx}>
-                                                <td className="p-2">{i.name} <span className="text-xs text-lumina-muted block">{i.sku}</span></td>
-                                                <td className="p-2 text-right">{i.qty}</td>
-                                                <td className="p-2 text-right font-mono">{formatRupiah(i.subtotal)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                    <tfoot className="bg-lumina-base font-bold">
-                                        <tr><td colSpan="2" className="p-2 text-right">Total</td><td className="p-2 text-right text-lumina-gold">{formatRupiah(selectedPO.total_amount)}</td></tr>
-                                    </tfoot>
-                                </table>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-lumina-text min-w-[300px]">
+                                        <thead className="bg-lumina-base text-lumina-muted">
+                                            <tr><th className="p-2 text-left">Product</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Subtotal</th></tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-lumina-border">
+                                            {poItems.map((i, idx) => (
+                                                <tr key={idx}>
+                                                    <td className="p-2">{i.name} <span className="text-xs text-lumina-muted block">{i.sku}</span></td>
+                                                    <td className="p-2 text-right">{i.qty}</td>
+                                                    <td className="p-2 text-right font-mono">{formatRupiah(i.subtotal)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="bg-lumina-base font-bold">
+                                            <tr><td colSpan="2" className="p-2 text-right">Total</td><td className="p-2 text-right text-lumina-gold">{formatRupiah(selectedPO.total_amount)}</td></tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>

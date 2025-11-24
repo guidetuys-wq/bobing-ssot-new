@@ -8,6 +8,7 @@
   "/page": "app/page.js",
   "/partners/page": "app/partners/page.js",
   "/products/page": "app/products/page.js",
+  "/sales-import/page": "app/sales-import/page.js",
   "/sales-manual/page": "app/sales-manual/page.js",
   "/settings/page": "app/settings/page.js",
   "/supplier-sessions/page": "app/supplier-sessions/page.js",

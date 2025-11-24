@@ -8,7 +8,7 @@ import { Portal } from '@/lib/usePortal';
 
 // Konfigurasi Cache (Optimized)
 const CACHE_KEY = 'lumina_finance_accounts_v2';
-const CACHE_DURATION = 30 * 60 * 1000; // 30 Menit (Master data jarang berubah)
+const CACHE_DURATION = 30 * 60 * 1000; // 30 Menit
 
 export default function FinanceAccountsPage() {
   const [accounts, setAccounts] = useState([]);
@@ -89,12 +89,10 @@ export default function FinanceAccountsPage() {
     }
   };
 
-  // Helper function: Check if status is Active
   const isActive = (status) => {
     return status === 'Aktif' || status === 'Active';
   };
 
-  // TOGGLE STATUS FUNCTION
   const toggleStatus = async (id, currentStatus) => {
     try {
       const accountRef = doc(db, 'chart_of_accounts', id);
@@ -190,84 +188,85 @@ export default function FinanceAccountsPage() {
 
   return (
     <div className="space-y-6 fade-in pb-20">
-        {/* Header */}
-        <div className="flex justify-between items-start">
-      <div>
-        <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Chart of Accounts</h2>
-        <p className="text-lumina-muted mt-1">Master financial accounts (Assets, Liabilities, Equity).</p>
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-xl md:text-3xl font-bold text-lumina-text">Chart of Accounts</h2>
+          <p className="text-lumina-muted mt-1">Master financial accounts (Assets, Liabilities, Equity).</p>
+        </div>
+        <button
+          onClick={() => openModal()}
+          className="px-6 py-2 bg-lumina-gold text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors whitespace-nowrap"
+        >
+          + ADD ACCOUNT
+        </button>
       </div>
-      <button
-        onClick={() => openModal()}
-        className="px-6 py-2 bg-lumina-gold text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors whitespace-nowrap"
-      >
-        + ADD ACCOUNT
-      </button>
-    </div>
 
-
-      {/* Table */}
+      {/* Table Responsive Wrapper */}
       <div className="card-luxury overflow-hidden">
-        <table className="table-dark w-full">
-          <thead>
-            <tr>
-              <th className="text-left pl-6 py-3 w-20">CODE</th>
-              <th className="text-left">ACCOUNT NAME</th>
-              <th className="text-left">CATEGORY</th>
-              <th className="text-center w-32">STATUS</th>
-              <th className="text-right pr-6 w-20">ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+        <div className="overflow-x-auto">
+          <table className="table-dark w-full min-w-[600px]">
+            <thead>
               <tr>
-                <td colSpan="5" className="p-8 text-center text-lumina-muted">Loading...</td>
+                <th className="text-left pl-6 py-3 w-20">CODE</th>
+                <th className="text-left">ACCOUNT NAME</th>
+                <th className="text-left">CATEGORY</th>
+                <th className="text-center w-32">STATUS</th>
+                <th className="text-right pr-6 w-20">ACTIONS</th>
               </tr>
-            ) : accounts.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="p-8 text-center text-lumina-muted">No accounts found.</td>
-              </tr>
-            ) : (
-              accounts.map((account) => {
-                const statusIsActive = isActive(account.status);
-                
-                return (
-                  <tr key={account.id} className="border-t border-lumina-border hover:bg-lumina-highlight/10 transition">
-                    <td className="text-left pl-6 py-3 font-mono font-bold text-lumina-gold">{account.code}</td>
-                    <td className="text-left text-lumina-text py-3">{account.name}</td>
-                    <td className="text-left py-3">
-                      <span className="badge-luxury badge-neutral">{account.category}</span>
-                    </td>
-                    
-                    {/* TOGGLE STATUS BUTTON */}
-                    <td className="text-center py-3">
-                      <button
-                        onClick={() => toggleStatus(account.id, account.status)}
-                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-semibold text-xs transition-all cursor-pointer ${
-                          statusIsActive
-                            ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                            : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                        }`}
-                        title="Click to toggle status"
-                      >
-                        <span className={`w-2 h-2 rounded-full ${statusIsActive ? 'bg-green-400' : 'bg-red-400'}`}></span>
-                        {statusIsActive ? 'ACTIVE' : 'INACTIVE'}
-                      </button>
-                    </td>
-                    
-                    <td className="text-right pr-6 py-3">
-                      <button
-                        onClick={() => deleteAccount(account.id)}
-                        className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors"
-                      >
-                        Del
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="p-8 text-center text-lumina-muted">Loading...</td>
+                </tr>
+              ) : accounts.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="p-8 text-center text-lumina-muted">No accounts found.</td>
+                </tr>
+              ) : (
+                accounts.map((account) => {
+                  const statusIsActive = isActive(account.status);
+                  
+                  return (
+                    <tr key={account.id} className="border-t border-lumina-border hover:bg-lumina-highlight/10 transition">
+                      <td className="text-left pl-6 py-3 font-mono font-bold text-lumina-gold">{account.code}</td>
+                      <td className="text-left text-lumina-text py-3">{account.name}</td>
+                      <td className="text-left py-3">
+                        <span className="badge-luxury badge-neutral whitespace-nowrap">{account.category}</span>
+                      </td>
+                      
+                      {/* TOGGLE STATUS BUTTON */}
+                      <td className="text-center py-3">
+                        <button
+                          onClick={() => toggleStatus(account.id, account.status)}
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-semibold text-xs transition-all cursor-pointer ${
+                            statusIsActive
+                              ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                              : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                          }`}
+                          title="Click to toggle status"
+                        >
+                          <span className={`w-2 h-2 rounded-full ${statusIsActive ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                          {statusIsActive ? 'ACTIVE' : 'INACTIVE'}
+                        </button>
+                      </td>
+                      
+                      <td className="text-right pr-6 py-3">
+                        <button
+                          onClick={() => deleteAccount(account.id)}
+                          className="text-xs font-bold text-rose-500 hover:text-rose-400 transition-colors"
+                        >
+                          Del
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* MODAL */}
@@ -295,7 +294,6 @@ export default function FinanceAccountsPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 space-y-5 bg-lumina-base custom-scrollbar">
-                
                 <div>
                   <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Account Code</label>
                   <input
@@ -309,7 +307,6 @@ export default function FinanceAccountsPage() {
                     maxLength="10"
                   />
                 </div>
-
                 <div>
                   <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Account Name</label>
                   <input
@@ -322,7 +319,6 @@ export default function FinanceAccountsPage() {
                     disabled={uploading}
                   />
                 </div>
-
                 <div>
                   <label className="block text-xs font-bold text-lumina-muted uppercase mb-2">Category</label>
                   <select
@@ -338,7 +334,6 @@ export default function FinanceAccountsPage() {
                     ))}
                   </select>
                 </div>
-
               </form>
 
               <div className="px-6 py-4 border-t border-lumina-border bg-lumina-surface rounded-b-2xl flex justify-end gap-3 flex-shrink-0">

@@ -1,14 +1,15 @@
 "use client";
 import TabsLayout from '@/components/TabsLayout';
+import { CustomersIcon, SuppliersIcon, WarehousesIcon } from '@/components/DashboardIcons';
 import CustomersPage from '../customers/page';
 import SuppliersPage from '../suppliers/page';
 import WarehousesPage from '../warehouses/page';
 
 export default function PartnerCenter() {
   const tabs = [
-    { id: 'customers', label: '👥 Pelanggan' },
-    { id: 'suppliers', label: '🏭 Supplier' },
-    { id: 'warehouses', label: '🏢 Gudang' },
+    { id: 'customers', label: <span className="flex items-center gap-2"><CustomersIcon /> Pelanggan</span> },
+    { id: 'suppliers', label: <span className="flex items-center gap-2"><SuppliersIcon /> Supplier</span> },
+    { id: 'warehouses', label: <span className="flex items-center gap-2"><WarehousesIcon /> Gudang</span> },
   ];
 
   return (
