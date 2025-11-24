@@ -1,15 +1,62 @@
-// app/products-import/page.js
 "use client";
 import { useState } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, addDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_import_master';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
+
 export default function ImportProductsPage() {
     const [logs, setLogs] = useState([]);
     const [processing, setProcessing] = useState(false);
 
     const addLog = (msg, type='info') => setLogs(prev => [...prev, {msg, type}]);
+
+    // Fungsi membersihkan cache halaman lain agar data baru muncul
+    const invalidateAppCaches = () => {
+        const keysToRemove = [
+            'lumina_products_page_data',
+            'lumina_brands_data',
+            'lumina_inventory_data',
+            CACHE_KEY // Clear cache master import sendiri
+        ];
+        keysToRemove.forEach(k => sessionStorage.removeItem(k));
+        console.log("App caches invalidated.");
+    };
+
+    const getMasterData = async () => {
+        // 1. Cek Cache
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+            const { brandsMap, prodMap, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < CACHE_DURATION) {
+                addLog("Menggunakan data master dari Cache...", "info");
+                return { brandsMap, prodMap };
+            }
+        }
+
+        // 2. Fetch Firebase (Tanpa Limit demi Integritas Data Duplikat)
+        addLog("Mengambil data master terbaru dari server...", "info");
+        
+        const brandsSnap = await getDocs(collection(db, "brands"));
+        const brandsMap = {}; 
+        brandsSnap.forEach(d => brandsMap[d.data().name.toLowerCase()] = d.id);
+
+        const prodsSnap = await getDocs(collection(db, "products"));
+        const prodMap = {}; 
+        prodsSnap.forEach(d => prodMap[d.data().base_sku.toUpperCase()] = d.id);
+
+        // 3. Simpan Cache
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+            brandsMap, 
+            prodMap,
+            timestamp: Date.now()
+        }));
+
+        return { brandsMap, prodMap };
+    };
 
     const handleFile = async (e) => {
         const file = e.target.files[0];
@@ -18,12 +65,8 @@ export default function ImportProductsPage() {
         setLogs([]);
 
         try {
-            addLog("Memuat data master...", "info");
-            const brandsSnap = await getDocs(collection(db, "brands"));
-            const brandsMap = {}; brandsSnap.forEach(d => brandsMap[d.data().name.toLowerCase()] = d.id);
-
-            const prodsSnap = await getDocs(collection(db, "products"));
-            const prodMap = {}; prodsSnap.forEach(d => prodMap[d.data().base_sku.toUpperCase()] = d.id);
+            // Load Master Data (Cached/Fresh)
+            const { brandsMap, prodMap } = await getMasterData();
 
             const reader = new FileReader();
             reader.onload = async (ev) => {
@@ -33,38 +76,50 @@ export default function ImportProductsPage() {
                 addLog(`Mendeteksi ${rows.length} baris data.`, "info");
                 
                 let success = 0;
+                let newBrandsCount = 0;
+                let newProdsCount = 0;
+
                 for (const row of rows) {
                     try {
                         const baseSku = String(row['base_sku']||'').toUpperCase().trim();
                         const prodName = row['product_name'];
                         if(!baseSku || !prodName) continue;
 
+                        // 1. Handle Brand
                         let brandId = null;
                         if(row['brand']) {
                             const bName = row['brand'].trim();
                             const bKey = bName.toLowerCase();
-                            if(brandsMap[bKey]) brandId = brandsMap[bKey];
-                            else {
+                            if(brandsMap[bKey]) {
+                                brandId = brandsMap[bKey];
+                            } else {
                                 const bRef = await addDoc(collection(db, "brands"), { name: bName, type: 'supplier_brand', created_at: serverTimestamp() });
-                                brandId = bRef.id; brandsMap[bKey] = brandId;
+                                brandId = bRef.id; 
+                                brandsMap[bKey] = brandId; // Update local map
+                                newBrandsCount++;
                                 addLog(`Brand Baru: ${bName}`, "success");
                             }
                         }
 
+                        // 2. Handle Product (Parent)
                         let prodId = prodMap[baseSku];
                         if(!prodId) {
                             const pRef = await addDoc(collection(db, "products"), {
                                 base_sku: baseSku, name: prodName, brand_id: brandId, 
                                 category: row['category']||'Uncategorized', status: 'active', created_at: serverTimestamp()
                             });
-                            prodId = pRef.id; prodMap[baseSku] = prodId;
+                            prodId = pRef.id; 
+                            prodMap[baseSku] = prodId; // Update local map
+                            newProdsCount++;
                             addLog(`Produk Baru: ${prodName}`, "success");
                         }
 
+                        // 3. Handle Variant
                         const color = String(row['color']||'STD').toUpperCase().replace(/\s+/g, '-');
                         const size = String(row['size']||'ALL').toUpperCase().replace(/\s+/g, '-');
                         const sku = `${baseSku}-${color}-${size}`;
                         
+                        // Cek Variant Existing (Real-time check wajib untuk variant spesifik)
                         const qVar = query(collection(db, "product_variants"), where("sku", "==", sku));
                         const sVar = await getDocs(qVar);
                         
@@ -77,14 +132,28 @@ export default function ImportProductsPage() {
                             addLog(`+ Varian: ${sku}`, "success");
                             success++;
                         }
-                    } catch(err) { console.error(err); addLog(`Error baris: ${err.message}`, "error"); }
+                    } catch(err) { 
+                        console.error(err); 
+                        addLog(`Error baris: ${err.message}`, "error"); 
+                    }
                 }
+                
                 addLog(`Selesai. ${success} varian ditambahkan.`, "info");
+                
+                // Jika ada data baru, hapus cache aplikasi agar data muncul di halaman lain
+                if (success > 0 || newBrandsCount > 0 || newProdsCount > 0) {
+                    invalidateAppCaches();
+                    addLog("Cache aplikasi diperbarui.", "warning");
+                }
+                
                 setProcessing(false);
             };
             reader.readAsArrayBuffer(file);
 
-        } catch(e) { addLog(e.message, "error"); setProcessing(false); }
+        } catch(e) { 
+            addLog(e.message, "error"); 
+            setProcessing(false); 
+        }
     };
 
     return (

@@ -1,10 +1,13 @@
-// app/inventory/page.js
 "use client";
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
 import { collection, getDocs, doc, runTransaction, query, orderBy, where, serverTimestamp, limit } from 'firebase/firestore';
 import { sortBySize } from '@/lib/utils';
 import { Portal } from '@/lib/usePortal';
+
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_inventory_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function InventoryPage() {
     // --- STATE ---
@@ -19,33 +22,55 @@ export default function InventoryPage() {
     // Modals State
     const [modalAdjOpen, setModalAdjOpen] = useState(false);
     const [modalCardOpen, setModalCardOpen] = useState(false);
-    const [modalDetailOpen, setModalDetailOpen] = useState(false); // Detail Modal State
-    const [selectedProduct, setSelectedProduct] = useState(null); // Selected Product for Detail
+    const [modalDetailOpen, setModalDetailOpen] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState(null); 
     
     // Selected Data for Modals
     const [adjData, setAdjData] = useState({});
     const [cardData, setCardData] = useState([]);
     const [modalGroup, setModalGroup] = useState('color');
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        fetchData(); 
+    }, []);
 
-    // --- FETCH DATA ---
-    const fetchData = async () => {
+    // --- FETCH DATA (Optimized) ---
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
         try {
+            // 1. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { products, warehouses, snapshots, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setProducts(products);
+                        setWarehouses(warehouses);
+                        setSnapshots(snapshots);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Fetch Firebase (Jika cache expired / force)
             const [snapWh, snapProd, snapVar, snapShot] = await Promise.all([
                 getDocs(query(collection(db, "warehouses"), orderBy("created_at", "asc"))),
-                getDocs(collection(db, "products")),
-                getDocs(query(collection(db, "product_variants"), orderBy("sku", "asc"))),
-                getDocs(collection(db, "stock_snapshots"))
+                getDocs(query(collection(db, "products"), limit(100))), // Safety limit
+                getDocs(query(collection(db, "product_variants"), orderBy("sku", "asc"))), // Perlu semua variant untuk mapping
+                getDocs(collection(db, "stock_snapshots")) // Perlu semua snapshot untuk total stock
             ]);
 
-            const whList = []; snapWh.forEach(d => whList.push({id: d.id, ...d.data()}));
+            const whList = []; 
+            snapWh.forEach(d => whList.push({id: d.id, ...d.data()}));
             setWarehouses(whList);
 
-            const shots = {}; snapShot.forEach(d => shots[d.id] = d.data().qty || 0);
+            const shots = {}; 
+            snapShot.forEach(d => shots[d.id] = d.data().qty || 0);
             setSnapshots(shots);
 
-            const vars = []; snapVar.forEach(d => vars.push({id: d.id, ...d.data()}));
+            const vars = []; 
+            snapVar.forEach(d => vars.push({id: d.id, ...d.data()}));
             
             const prodMap = {};
             snapProd.forEach(d => {
@@ -53,6 +78,7 @@ export default function InventoryPage() {
                 prodMap[d.id] = { id: d.id, ...p, variants: [], totalStock: 0 };
             });
 
+            // Mapping Logic
             vars.forEach(v => {
                 if (prodMap[v.product_id]) {
                     let total = 0;
@@ -65,7 +91,19 @@ export default function InventoryPage() {
             const sorted = Object.values(prodMap).sort((a,b) => b.totalStock - a.totalStock);
             setProducts(sorted);
 
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+            // 3. Simpan Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                products: sorted,
+                warehouses: whList,
+                snapshots: shots,
+                timestamp: Date.now()
+            }));
+
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     // --- LOGIC ---
@@ -117,17 +155,17 @@ export default function InventoryPage() {
                 if(sDoc.exists()) t.update(sRef, { qty: parseInt(adjData.realQty) });
                 else t.set(sRef, { id: sRef.id, variant_id: adjData.variantId, warehouse_id: adjData.warehouseId, qty: parseInt(adjData.realQty) });
             });
+            
             alert("Stok berhasil diupdate!");
             
-            setSnapshots(prev => ({ ...prev, [`${adjData.variantId}_${adjData.warehouseId}`]: parseInt(adjData.realQty) }));
-            const updatedProducts = [...products];
-            const prodIdx = updatedProducts.findIndex(p => p.variants.some(v => v.id === adjData.variantId));
-            if(prodIdx > -1) {
-                updatedProducts[prodIdx].totalStock += diff;
-                setProducts(updatedProducts);
-            }
-            setModalAdjOpen(false); 
-        } catch (e) { alert(e.message); }
+            // Clear Cache & Refresh
+            sessionStorage.removeItem(CACHE_KEY);
+            setModalAdjOpen(false);
+            fetchData(true);
+
+        } catch (e) { 
+            alert(e.message); 
+        }
     };
 
     const openCard = async (vId, sku) => {

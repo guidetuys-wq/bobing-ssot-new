@@ -2,7 +2,6 @@
 "[project]/app/purchases-import/page.js [app-client] (ecmascript)", ((__turbopack_context__) => {
 "use strict";
 
-// app/purchases-import/page.js
 __turbopack_context__.s([
     "default",
     ()=>ImportPurchasesPage
@@ -22,6 +21,9 @@ var _s = __turbopack_context__.k.signature();
 ;
 ;
 ;
+// Konfigurasi Cache
+const CACHE_VARIANTS = 'lumina_import_variants_cache';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 function ImportPurchasesPage() {
     _s();
     const { user } = (0, __TURBOPACK__imported__module__$5b$project$5d2f$context$2f$AuthContext$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useAuth"])();
@@ -57,23 +59,49 @@ function ImportPurchasesPage() {
                     type
                 }
             ]);
+    // Fungsi Invalidate Cache agar data di halaman lain update
+    const invalidateCaches = ()=>{
+        sessionStorage.removeItem('lumina_inventory_data'); // Stok berubah
+        sessionStorage.removeItem('lumina_balance_data'); // Hutang berubah
+        sessionStorage.removeItem('lumina_purchases_history'); // History berubah
+        console.log("Cache invalidation complete.");
+    };
+    const getMasterVariants = async ()=>{
+        // 1. Cek Cache
+        const cached = sessionStorage.getItem(CACHE_VARIANTS);
+        if (cached) {
+            const { varMap, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < CACHE_DURATION) {
+                addLog("Menggunakan data varian dari Cache...", "info");
+                return varMap;
+            }
+        }
+        // 2. Fetch Firebase
+        addLog("Mengambil data master varian terbaru...", "info");
+        const varSnap = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants"));
+        const varMap = {};
+        varSnap.forEach((d)=>{
+            const v = d.data();
+            if (v.sku) varMap[v.sku.toUpperCase().trim()] = {
+                id: d.id,
+                ...v
+            };
+        });
+        // 3. Simpan Cache
+        sessionStorage.setItem(CACHE_VARIANTS, JSON.stringify({
+            varMap,
+            timestamp: Date.now()
+        }));
+        return varMap;
+    };
     const handleFile = async (e)=>{
         const file = e.target.files[0];
         if (!file || !selectedWh) return alert("Pilih gudang dan file!");
         setProcessing(true);
         setLogs([]);
-        addLog("Membaca file...", "info");
         try {
-            // 1. Load Master Variants
-            const varSnap = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants"));
-            const varMap = {};
-            varSnap.forEach((d)=>{
-                const v = d.data();
-                if (v.sku) varMap[v.sku.toUpperCase().trim()] = {
-                    id: d.id,
-                    ...v
-                };
-            });
+            // 1. Load Master Variants (Cached)
+            const varMap = await getMasterVariants();
             // 2. Read File
             const reader = new FileReader();
             reader.onload = async (ev)=>{
@@ -91,7 +119,7 @@ function ImportPurchasesPage() {
                 rows.forEach((row)=>{
                     // Auto detect keys (case insensitive)
                     const keys = Object.keys(row);
-                    const kInv = keys.find((k)=>k.match(/invoice|stock in id/i));
+                    const kInv = keys.find((k)=>k.match(/invoice|stock in id|ref/i));
                     const kSku = keys.find((k)=>k.match(/sku|varian id/i));
                     const kQty = keys.find((k)=>k.match(/qty|jumlah/i));
                     const kCost = keys.find((k)=>k.match(/cost|harga/i));
@@ -105,8 +133,10 @@ function ImportPurchasesPage() {
                         });
                     }
                 });
-                // 4. Process Groups
-                const batch = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["writeBatch"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"]);
+                // 4. Process Groups (With Batch Chunking)
+                // Firebase Batch Limit = 500 operations. Kita commit setiap 450.
+                let batch = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["writeBatch"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"]);
+                let opCount = 0; // Counter operasi dalam batch saat ini
                 let poCount = 0;
                 for (const [inv, items] of Object.entries(groups)){
                     const validItems = [];
@@ -126,6 +156,7 @@ function ImportPurchasesPage() {
                         }
                     });
                     if (validItems.length > 0) {
+                        // A. Create PO Header (1 Op)
                         const poRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["doc"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "purchase_orders"));
                         batch.set(poRef, {
                             supplier_name: 'Imported',
@@ -139,7 +170,10 @@ function ImportPurchasesPage() {
                             created_at: (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["serverTimestamp"])(),
                             created_by: user?.email
                         });
-                        validItems.forEach((item)=>{
+                        opCount++;
+                        // FIXED: Menggunakan for...of agar bisa await di dalam loop
+                        for (const item of validItems){
+                            // B. Create PO Item (1 Op)
                             const itemRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["doc"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], `purchase_orders/${poRef.id}/items`));
                             batch.set(itemRef, {
                                 variant_id: item.variant_id,
@@ -147,6 +181,8 @@ function ImportPurchasesPage() {
                                 unit_cost: item.cost,
                                 subtotal: item.qty * item.cost
                             });
+                            opCount++;
+                            // C. Create Movement (1 Op)
                             const moveRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["doc"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "stock_movements"));
                             batch.set(moveRef, {
                                 variant_id: item.variant_id,
@@ -159,12 +195,34 @@ function ImportPurchasesPage() {
                                 date: (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["serverTimestamp"])(),
                                 notes: `Import ${inv}`
                             });
-                        });
+                            opCount++;
+                            // D. Update/Set Stock Snapshot (1 Op) - FIX PENTING!
+                            // Menggunakan increment agar atomic dan tidak perlu read dulu
+                            const snapRef = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["doc"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "stock_snapshots", `${item.variant_id}_${selectedWh}`);
+                            batch.set(snapRef, {
+                                id: `${item.variant_id}_${selectedWh}`,
+                                variant_id: item.variant_id,
+                                warehouse_id: selectedWh,
+                                qty: (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["increment"])(item.qty) // Menambah stok otomatis
+                            }, {
+                                merge: true
+                            });
+                            opCount++;
+                            // Safety Check: Commit jika mendekati limit 500
+                            if (opCount >= 450) {
+                                await batch.commit();
+                                batch = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["writeBatch"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"]); // Reset batch
+                                opCount = 0;
+                                addLog(`...menyimpan batch sebagian...`, "warning");
+                            }
+                        }
                         poCount++;
                         addLog(`[OK] PO ${inv}: ${validItems.length} items`, "success");
                     }
                 }
-                await batch.commit();
+                // Commit sisa operasi
+                if (opCount > 0) await batch.commit();
+                invalidateCaches();
                 addLog(`SELESAI! Berhasil import ${poCount} PO.`, "success");
                 setProcessing(false);
             };
@@ -186,7 +244,7 @@ function ImportPurchasesPage() {
                         children: "Import Purchase Orders (Stock In)"
                     }, void 0, false, {
                         fileName: "[project]/app/purchases-import/page.js",
-                        lineNumber: 143,
+                        lineNumber: 209,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -200,7 +258,7 @@ function ImportPurchasesPage() {
                                         children: "1. Target Warehouse"
                                     }, void 0, false, {
                                         fileName: "[project]/app/purchases-import/page.js",
-                                        lineNumber: 148,
+                                        lineNumber: 214,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("select", {
@@ -213,7 +271,7 @@ function ImportPurchasesPage() {
                                                 children: "-- Select Warehouse --"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/purchases-import/page.js",
-                                                lineNumber: 150,
+                                                lineNumber: 216,
                                                 columnNumber: 29
                                             }, this),
                                             warehouses.map((w)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -221,13 +279,13 @@ function ImportPurchasesPage() {
                                                     children: w.name
                                                 }, w.id, false, {
                                                     fileName: "[project]/app/purchases-import/page.js",
-                                                    lineNumber: 151,
+                                                    lineNumber: 217,
                                                     columnNumber: 50
                                                 }, this))
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/purchases-import/page.js",
-                                        lineNumber: 149,
+                                        lineNumber: 215,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -235,13 +293,13 @@ function ImportPurchasesPage() {
                                         children: "Select where the stock will be added."
                                     }, void 0, false, {
                                         fileName: "[project]/app/purchases-import/page.js",
-                                        lineNumber: 153,
+                                        lineNumber: 219,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 147,
+                                lineNumber: 213,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -252,7 +310,7 @@ function ImportPurchasesPage() {
                                         children: "2. Upload File"
                                     }, void 0, false, {
                                         fileName: "[project]/app/purchases-import/page.js",
-                                        lineNumber: 158,
+                                        lineNumber: 224,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -266,7 +324,7 @@ function ImportPurchasesPage() {
                                                 className: "absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/purchases-import/page.js",
-                                                lineNumber: 160,
+                                                lineNumber: 226,
                                                 columnNumber: 29
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("svg", {
@@ -281,12 +339,12 @@ function ImportPurchasesPage() {
                                                     d: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/purchases-import/page.js",
-                                                    lineNumber: 161,
+                                                    lineNumber: 227,
                                                     columnNumber: 178
                                                 }, this)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/purchases-import/page.js",
-                                                lineNumber: 161,
+                                                lineNumber: 227,
                                                 columnNumber: 29
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -294,31 +352,31 @@ function ImportPurchasesPage() {
                                                 children: "Click to upload .xlsx / .csv"
                                             }, void 0, false, {
                                                 fileName: "[project]/app/purchases-import/page.js",
-                                                lineNumber: 162,
+                                                lineNumber: 228,
                                                 columnNumber: 29
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/purchases-import/page.js",
-                                        lineNumber: 159,
+                                        lineNumber: 225,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 157,
+                                lineNumber: 223,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/purchases-import/page.js",
-                        lineNumber: 145,
+                        lineNumber: 211,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/purchases-import/page.js",
-                lineNumber: 142,
+                lineNumber: 208,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -331,21 +389,21 @@ function ImportPurchasesPage() {
                                 className: "w-2 h-2 rounded-full bg-red-500"
                             }, void 0, false, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 171,
+                                lineNumber: 237,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "w-2 h-2 rounded-full bg-yellow-500"
                             }, void 0, false, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 172,
+                                lineNumber: 238,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: "w-2 h-2 rounded-full bg-green-500"
                             }, void 0, false, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 173,
+                                lineNumber: 239,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -353,13 +411,13 @@ function ImportPurchasesPage() {
                                 children: "System Log"
                             }, void 0, false, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 174,
+                                lineNumber: 240,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/purchases-import/page.js",
-                        lineNumber: 170,
+                        lineNumber: 236,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -370,7 +428,7 @@ function ImportPurchasesPage() {
                                 children: "Waiting for input..."
                             }, void 0, false, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 178,
+                                lineNumber: 244,
                                 columnNumber: 25
                             }, this) : logs.map((l, i)=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: `flex gap-2 ${l.type === 'error' ? 'text-rose-500' : l.type === 'success' ? 'text-emerald-400' : 'text-lumina-muted'}`,
@@ -380,20 +438,20 @@ function ImportPurchasesPage() {
                                             children: '>'
                                         }, void 0, false, {
                                             fileName: "[project]/app/purchases-import/page.js",
-                                            lineNumber: 181,
+                                            lineNumber: 247,
                                             columnNumber: 29
                                         }, this),
                                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
                                             children: l.msg
                                         }, void 0, false, {
                                             fileName: "[project]/app/purchases-import/page.js",
-                                            lineNumber: 182,
+                                            lineNumber: 248,
                                             columnNumber: 29
                                         }, this)
                                     ]
                                 }, i, true, {
                                     fileName: "[project]/app/purchases-import/page.js",
-                                    lineNumber: 180,
+                                    lineNumber: 246,
                                     columnNumber: 25
                                 }, this)),
                             processing && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -401,25 +459,25 @@ function ImportPurchasesPage() {
                                 children: "_ Processing data..."
                             }, void 0, false, {
                                 fileName: "[project]/app/purchases-import/page.js",
-                                lineNumber: 185,
+                                lineNumber: 251,
                                 columnNumber: 36
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/purchases-import/page.js",
-                        lineNumber: 176,
+                        lineNumber: 242,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/purchases-import/page.js",
-                lineNumber: 169,
+                lineNumber: 235,
                 columnNumber: 13
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/purchases-import/page.js",
-        lineNumber: 141,
+        lineNumber: 207,
         columnNumber: 9
     }, this);
 }

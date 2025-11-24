@@ -1,9 +1,12 @@
-// app/finance-reports/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { formatRupiah } from '@/lib/utils';
+
+// Konfigurasi Cache
+const CACHE_PREFIX = 'lumina_report_';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function ReportPLPage() {
     const [data, setData] = useState({ revenue: 0, cogs: 0, expenses: 0, details: {} });
@@ -13,30 +16,88 @@ export default function ReportPLPage() {
         end: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0] 
     });
 
-    const generateReport = async () => {
+    // Generate Report (Smart Caching)
+    const generateReport = async (forceRefresh = false) => {
         setLoading(true);
-        const start = new Date(range.start); start.setHours(0,0,0,0);
-        const end = new Date(range.end); end.setHours(23,59,59,999);
+        
+        // 1. Generate Cache Key berdasarkan Tanggal
+        const cacheKey = `${CACHE_PREFIX}${range.start}_${range.end}`;
 
         try {
-            const qSales = query(collection(db, "sales_orders"), where("order_date", ">=", start), where("order_date", "<=", end));
-            const snapSales = await getDocs(qSales);
-            let rev = 0, cogs = 0;
-            snapSales.forEach(d => { const s = d.data(); rev += (s.net_amount || 0); cogs += (s.total_cost || 0); });
+            // 2. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(cacheKey);
+                if (cached) {
+                    const { data: cachedData, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setData(cachedData);
+                        setLoading(false);
+                        return; // Hemat Reads
+                    }
+                }
+            }
 
-            const qExp = query(collection(db, "cash_transactions"), where("date", ">=", start), where("date", "<=", end), where("type", "==", "out"));
-            const snapExp = await getDocs(qExp);
-            let expTotal = 0; const expDet = {};
-            const exclude = ['pembelian', 'transfer', 'prive']; 
-            snapExp.forEach(d => {
-                const t = d.data(); const cat = (t.category || 'Lainnya').toLowerCase();
-                if(!exclude.includes(cat)) { expTotal += t.amount; expDet[cat] = (expDet[cat] || 0) + t.amount; }
+            // 3. Fetch Data Real-time
+            const start = new Date(range.start); start.setHours(0,0,0,0);
+            const end = new Date(range.end); end.setHours(23,59,59,999);
+
+            // A. Sales (Revenue & COGS)
+            const qSales = query(
+                collection(db, "sales_orders"), 
+                where("order_date", ">=", start), 
+                where("order_date", "<=", end)
+            );
+            const snapSales = await getDocs(qSales);
+            
+            let rev = 0, cogs = 0;
+            snapSales.forEach(d => { 
+                const s = d.data(); 
+                rev += (s.net_amount || 0); 
+                cogs += (s.total_cost || 0); 
             });
-            setData({ revenue: rev, cogs: cogs, expenses: expTotal, details: expDet });
-        } catch(e) { console.error(e); } finally { setLoading(false); }
+
+            // B. Expenses (Cash Out)
+            const qExp = query(
+                collection(db, "cash_transactions"), 
+                where("date", ">=", start), 
+                where("date", "<=", end), 
+                where("type", "==", "out")
+            );
+            const snapExp = await getDocs(qExp);
+            
+            let expTotal = 0; 
+            const expDet = {};
+            const exclude = ['pembelian', 'transfer', 'prive']; 
+            
+            snapExp.forEach(d => {
+                const t = d.data(); 
+                const cat = (t.category || 'Lainnya').toLowerCase();
+                // Filter kategori yang bukan expense operasional
+                if(!exclude.includes(cat)) { 
+                    expTotal += t.amount; 
+                    expDet[cat] = (expDet[cat] || 0) + t.amount; 
+                }
+            });
+
+            const reportData = { revenue: rev, cogs: cogs, expenses: expTotal, details: expDet };
+            setData(reportData);
+
+            // 4. Simpan Cache
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+                data: reportData,
+                timestamp: Date.now()
+            }));
+
+        } catch(e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
-    useEffect(() => { generateReport(); }, []);
+    useEffect(() => { 
+        generateReport(); 
+    }, []); // Load awal
 
     const gross = data.revenue - data.cogs;
     const net = gross - data.expenses;
@@ -54,7 +115,16 @@ export default function ReportPLPage() {
                     <input type="date" className="text-sm bg-transparent text-lumina-text border-none focus:ring-0 outline-none px-2" value={range.start} onChange={e=>setRange({...range, start:e.target.value})} />
                     <span className="text-lumina-muted">-</span>
                     <input type="date" className="text-sm bg-transparent text-lumina-text border-none focus:ring-0 outline-none px-2" value={range.end} onChange={e=>setRange({...range, end:e.target.value})} />
-                    <button onClick={generateReport} className="btn-gold px-4 py-1 text-xs">{loading ? '...' : 'Filter'}</button>
+                    
+                    {/* Tombol Filter (Pakai Cache) */}
+                    <button onClick={() => generateReport(false)} className="btn-gold px-4 py-1 text-xs">
+                        {loading ? '...' : 'Filter'}
+                    </button>
+                    
+                    {/* Tombol Refresh (Force Fetch) */}
+                    <button onClick={() => generateReport(true)} className="btn-ghost-dark px-3 py-1 text-xs border-l border-lumina-border ml-1" title="Force Refresh">
+                        ↻
+                    </button>
                 </div>
             </div>
 

@@ -1,42 +1,57 @@
+// app/cash/page.js
 'use client';
 import React from 'react';
 import { useState, useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, doc, runTransaction, query, orderBy, limit, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, doc, runTransaction, query, orderBy, limit, serverTimestamp, where } from 'firebase/firestore';
 import { formatRupiah } from '@/lib/utils';
 import { Portal } from '@/lib/usePortal';
+
+// --- KONFIGURASI CACHE ---
+const CACHE_ACC = 'lumina_cash_accounts';
+const CACHE_TX = 'lumina_cash_transactions';
+const CACHE_CAT = 'lumina_cash_categories';
+const CACHE_TIME = 5 * 60 * 1000; // 5 Menit
 
 export default function CashFlowPage() {
     const [accounts, setAccounts] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [summary, setSummary] = useState({ in: 0, out: 0 });
-    const [expandedDates, setExpandedDates] = useState({}); // ✅ State untuk collapse/expand
+    const [expandedDates, setExpandedDates] = useState({}); 
     
     const [modalExpOpen, setModalExpOpen] = useState(false);
     const [modalTfOpen, setModalTfOpen] = useState(false);
     const [formData, setFormData] = useState({ type: 'out', account_id: '', category: '', amount: '', description: '', date: '' });
     const [tfData, setTfData] = useState({ from: '', to: '', amount: '', note: '' });
     const [categories, setCategories] = useState([]);
-    const [editingId, setEditingId] = useState(null);
-    const [editAmount, setEditAmount] = useState('');
+    
+    // Edit States
     const [modalEditOpen, setModalEditOpen] = useState(false);
     const [editingTransaction, setEditingTransaction] = useState(null);
     const [editFormData, setEditFormData] = useState({ 
-        date: '', 
-        account_id: '', 
-        category: '', 
-        amount: '', 
-        description: '' 
+        date: '', account_id: '', category: '', amount: '', description: '' 
     });
 
+    useEffect(() => { 
+        fetchData(); 
+        fetchCategories(); // Load categories separate with cache
+    }, []);
 
-    useEffect(() => { fetchData(); }, []);
+    // 1. Fetch Categories (Optimized: Cache vs Realtime)
+    const fetchCategories = async () => {
+        const cached = sessionStorage.getItem(CACHE_CAT);
+        if (cached) {
+            const { data, ts } = JSON.parse(cached);
+            if (Date.now() - ts < CACHE_TIME) {
+                setCategories(data);
+                return;
+            }
+        }
 
-    // ✅ Real-time listener untuk categories dari chart_of_accounts
-    useEffect(() => {
-        const q = query(collection(db, "chart_of_accounts"), orderBy("code"));
-        const unsubscribe = onSnapshot(q, (snap) => {
+        try {
+            const q = query(collection(db, "chart_of_accounts"), orderBy("code"));
+            const snap = await getDocs(q);
             const cats = [];
             snap.forEach(d => {
                 const c = d.data();
@@ -45,36 +60,78 @@ export default function CashFlowPage() {
                 }
             });
             setCategories(cats);
-        });
-        return () => unsubscribe();
-    }, []);
+            sessionStorage.setItem(CACHE_CAT, JSON.stringify({ data: cats, ts: Date.now() }));
+        } catch(e) { console.error(e); }
+    };
 
-    const fetchData = async () => {
+    // 2. Fetch Data Utama (Accounts & Transactions)
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
         try {
-            const [accSnap, transSnap] = await Promise.all([
-                getDocs(query(collection(db, "cash_accounts"), orderBy("created_at"))),
-                getDocs(query(collection(db, "cash_transactions"), orderBy("date", "desc"), limit(50)))
-            ]);
+            // --- ACCOUNTS ---
+            let accList = [];
+            if (!forceRefresh) {
+                const cAcc = sessionStorage.getItem(CACHE_ACC);
+                if(cAcc) {
+                    const { data, ts } = JSON.parse(cAcc);
+                    if(Date.now() - ts < CACHE_TIME) accList = data;
+                }
+            }
             
-            const accList = []; 
-            accSnap.forEach(d => accList.push({id: d.id, ...d.data()}));
+            if (accList.length === 0) {
+                const accSnap = await getDocs(query(collection(db, "cash_accounts"), orderBy("created_at")));
+                accSnap.forEach(d => accList.push({id: d.id, ...d.data()}));
+                sessionStorage.setItem(CACHE_ACC, JSON.stringify({ data: accList, ts: Date.now() }));
+            }
             setAccounts(accList);
 
-            const transList = []; 
+            // --- TRANSACTIONS ---
+            let transList = [];
+            if (!forceRefresh) {
+                const cTx = sessionStorage.getItem(CACHE_TX);
+                if(cTx) {
+                    const { data, ts } = JSON.parse(cTx);
+                    if(Date.now() - ts < CACHE_TIME) transList = data;
+                }
+            }
+
+            if (transList.length === 0) {
+                // Gunakan Limit 50 untuk hemat reads
+                const transSnap = await getDocs(query(collection(db, "cash_transactions"), orderBy("date", "desc"), limit(50)));
+                transSnap.forEach(d => {
+                    const t = d.data();
+                    // Serialize Date agar aman masuk JSON Storage
+                    transList.push({
+                        id: d.id, 
+                        ...t, 
+                        date: t.date?.toDate ? t.date.toDate().toISOString() : t.date
+                    });
+                });
+                sessionStorage.setItem(CACHE_TX, JSON.stringify({ data: transList, ts: Date.now() }));
+            }
+            
+            setTransactions(transList);
+
+            // Hitung Summary Client-Side
             let totalIn = 0, totalOut = 0;
-            transSnap.forEach(d => {
-                const t = d.data();
-                transList.push({id: d.id, ...t});
+            transList.forEach(t => {
                 if(t.type === 'in') totalIn += (t.amount||0);
                 else totalOut += (t.amount||0);
             });
-            setTransactions(transList);
             setSummary({ in: totalIn, out: totalOut });
+
         } catch(e) { 
             console.error(e); 
         } finally { 
             setLoading(false); 
         }
+    };
+
+    // Fungsi Helper: Reset Cache saat ada update data
+    const clearCacheAndRefresh = () => {
+        sessionStorage.removeItem(CACHE_ACC); // Saldo berubah
+        sessionStorage.removeItem(CACHE_TX);  // List berubah
+        fetchData(true);
     };
 
     const submitTransaction = async (e) => {
@@ -100,10 +157,8 @@ export default function CashFlowPage() {
             });
             setModalExpOpen(false); 
             setFormData({ type: 'out', account_id: '', category: '', amount: '', description: '', date: '' });
-            fetchData();
-        } catch(e) { 
-            alert(e.message); 
-        }
+            clearCacheAndRefresh(); // Refresh data
+        } catch(e) { alert(e.message); }
     };
 
     const submitTransfer = async (e) => {
@@ -121,38 +176,27 @@ export default function CashFlowPage() {
                 t.update(toRef, { balance: (toDoc.data().balance||0) + amt });
                 
                 const logRef = doc(collection(db, "cash_transactions"));
-                t.set(logRef, { 
-                    type: 'transfer', 
-                    amount: amt, 
-                    date: serverTimestamp(), 
-                    description: `To ${toDoc.data().name}: ${tfData.note}`, 
-                    account_id: tfData.from, 
-                    ref_type: 'transfer_out' 
-                });
+                t.set(logRef, { type: 'transfer', amount: amt, date: serverTimestamp(), description: `To ${toDoc.data().name}: ${tfData.note}`, account_id: tfData.from, ref_type: 'transfer_out' });
                 
                 const logRefIn = doc(collection(db, "cash_transactions"));
-                t.set(logRefIn, { 
-                    type: 'transfer', 
-                    amount: amt, 
-                    date: serverTimestamp(), 
-                    description: `From ${fromDoc.data().name}: ${tfData.note}`, 
-                    account_id: tfData.to, 
-                    ref_type: 'transfer_in' 
-                });
+                t.set(logRefIn, { type: 'transfer', amount: amt, date: serverTimestamp(), description: `From ${fromDoc.data().name}: ${tfData.note}`, account_id: tfData.to, ref_type: 'transfer_in' });
             });
             setModalTfOpen(false); 
             setTfData({ from: '', to: '', amount: '', note: '' });
-            fetchData();
-        } catch(e) { 
-            alert(e.message); 
-        }
+            clearCacheAndRefresh();
+        } catch(e) { alert(e.message); }
     };
 
-    // ✅ Helper function - Separate settlement dan non-settlement transactions
+    // --- HELPER DATA PROCESSING ---
+    const getDateObj = (dateItem) => {
+        // Handle Firestore Timestamp OR ISO String (from Cache)
+        if(!dateItem) return new Date();
+        return dateItem.toDate ? dateItem.toDate() : new Date(dateItem);
+    };
+
     const separateTransactions = (transactions) => {
         const settlementTransactions = [];
         const normalTransactions = [];
-        
         transactions.forEach((transaction) => {
             if(transaction.description && transaction.description.toLowerCase().includes('settlement')) {
                 settlementTransactions.push(transaction);
@@ -160,56 +204,37 @@ export default function CashFlowPage() {
                 normalTransactions.push(transaction);
             }
         });
-        
         return { settlementTransactions, normalTransactions };
     };
 
-    // ✅ Helper function to group transactions by date (untuk settlement saja)
     const groupTransactionsByDate = (transactions) => {
         const grouped = {};
-        
         transactions.forEach((transaction) => {
-            const date = new Date(transaction.date.toDate()).toLocaleDateString();
-            if (!grouped[date]) {
-                grouped[date] = [];
-            }
+            const date = getDateObj(transaction.date).toLocaleDateString();
+            if (!grouped[date]) grouped[date] = [];
             grouped[date].push(transaction);
         });
-        
         return Object.entries(grouped)
             .sort((a, b) => new Date(b[0]) - new Date(a[0]))
-            .map(([date, items]) => ({
-                date,
-                items
-            }));
+            .map(([date, items]) => ({ date, items }));
     };
 
-    // ✅ Toggle function untuk collapse/expand
-    const toggleDateExpand = (date) => {
-        setExpandedDates(prev => ({
-            ...prev,
-            [date]: !prev[date]
-        }));
-    };
+    const toggleDateExpand = (date) => setExpandedDates(prev => ({ ...prev, [date]: !prev[date] }));
 
-    // ✅ Auto-expand tanggal pertama (untuk settlement)
     useEffect(() => {
         if(transactions.length > 0) {
             const { settlementTransactions } = separateTransactions(transactions);
             if(settlementTransactions.length > 0 && Object.keys(expandedDates).length === 0) {
                 const firstDate = groupTransactionsByDate(settlementTransactions)[0]?.date;
-                if(firstDate) {
-                    setExpandedDates({ [firstDate]: true });
-                }
+                if(firstDate) setExpandedDates({ [firstDate]: true });
             }
         }
     }, [transactions]);
 
-    // ✅ Open edit modal dengan data transaction
     const handleOpenEditModal = (transaction) => {
         setEditingTransaction(transaction);
         setEditFormData({
-            date: new Date(transaction.date.toDate()).toISOString().split('T')[0],
+            date: getDateObj(transaction.date).toISOString().split('T')[0],
             account_id: transaction.account_id,
             category: transaction.category || '',
             amount: transaction.amount.toString(),
@@ -218,7 +243,6 @@ export default function CashFlowPage() {
         setModalEditOpen(true);
     };
 
-    // ✅ FIXED - Function untuk save edit transaction (READ dulu, baru WRITE)
     const submitEditTransaction = async (e) => {
         e.preventDefault();
         try {
@@ -226,21 +250,16 @@ export default function CashFlowPage() {
             const oldAmount = editingTransaction.amount;
             
             await runTransaction(db, async (t) => {
-                // ✅ STEP 1: READ semua data yang diperlukan DULU
                 const transRef = doc(db, "cash_transactions", editingTransaction.id);
                 const accRef = doc(db, "cash_accounts", editFormData.account_id);
                 const accDoc = await t.get(accRef);
                 
-                // Jika account berubah, baca old account juga
                 let oldAccDoc = null;
                 if(editFormData.account_id !== editingTransaction.account_id) {
                     const oldAccRef = doc(db, "cash_accounts", editingTransaction.account_id);
                     oldAccDoc = await t.get(oldAccRef);
                 }
                 
-                // ✅ STEP 2: Setelah semua READ selesai, mulai WRITE
-                
-                // Update transaction
                 t.update(transRef, {
                     date: new Date(editFormData.date),
                     account_id: editFormData.account_id,
@@ -249,33 +268,17 @@ export default function CashFlowPage() {
                     description: editFormData.description
                 });
                 
-                // Hitung new balance untuk current/new account
                 let currentBalance = accDoc.data().balance || 0;
                 const isInc = editingTransaction.type === 'in' || editingTransaction.ref_type === 'transfer_in';
                 
-                // Undo old amount
-                let newBalance = isInc 
-                    ? currentBalance - oldAmount 
-                    : currentBalance + oldAmount;
-                
-                // Apply new amount
-                newBalance = isInc 
-                    ? newBalance + newAmount 
-                    : newBalance - newAmount;
-                
-                // Update current account balance
+                let newBalance = isInc ? currentBalance - oldAmount : currentBalance + oldAmount; // Undo Old
+                newBalance = isInc ? newBalance + newAmount : newBalance - newAmount; // Apply New
                 t.update(accRef, { balance: newBalance });
                 
-                // Jika account berubah, update old account juga
                 if(editFormData.account_id !== editingTransaction.account_id) {
                     const oldAccRef = doc(db, "cash_accounts", editingTransaction.account_id);
                     let oldAccBalance = oldAccDoc.data().balance || 0;
-                    
-                    // Undo dari old account
-                    oldAccBalance = isInc 
-                        ? oldAccBalance - oldAmount 
-                        : oldAccBalance + oldAmount;
-                    
+                    oldAccBalance = isInc ? oldAccBalance - oldAmount : oldAccBalance + oldAmount;
                     t.update(oldAccRef, { balance: oldAccBalance });
                 }
             });
@@ -283,46 +286,30 @@ export default function CashFlowPage() {
             setModalEditOpen(false);
             setEditingTransaction(null);
             setEditFormData({ date: '', account_id: '', category: '', amount: '', description: '' });
-            fetchData();
-        } catch(e) {
-            alert('Error: ' + e.message);
-        }
+            clearCacheAndRefresh();
+        } catch(e) { alert('Error: ' + e.message); }
     };
 
-    // ✅ FIXED - Function untuk delete transaction (READ dulu, baru DELETE)
     const handleDeleteTransaction = async () => {
         if(!confirm('Yakin ingin menghapus transaksi ini?')) return;
-        
         try {
             await runTransaction(db, async (t) => {
-                // ✅ STEP 1: READ semua data DULU sebelum DELETE/WRITE
                 const transRef = doc(db, "cash_transactions", editingTransaction.id);
                 const accRef = doc(db, "cash_accounts", editingTransaction.account_id);
-                const transDoc = await t.get(transRef);
                 const accDoc = await t.get(accRef);
-                
-                // ✅ STEP 2: Setelah semua READ selesai, baru DELETE/WRITE
-                
-                // Delete transaction
                 t.delete(transRef);
                 
-                // Undo balance
                 const isInc = editingTransaction.type === 'in' || editingTransaction.ref_type === 'transfer_in';
                 const currentBalance = accDoc.data().balance || 0;
                 const newBalance = isInc 
                     ? currentBalance - editingTransaction.amount 
                     : currentBalance + editingTransaction.amount;
-                
-                // Update account balance
                 t.update(accRef, { balance: newBalance });
             });
-            
             setModalEditOpen(false);
             setEditingTransaction(null);
-            fetchData();
-        } catch(e) {
-            alert('Error: ' + e.message);
-        }
+            clearCacheAndRefresh();
+        } catch(e) { alert('Error: ' + e.message); }
     };
 
     return (
@@ -373,24 +360,16 @@ export default function CashFlowPage() {
                             </tr>
                         </thead>
                         <tbody>
-                        {/* ✅ RENDER NORMAL TRANSACTIONS FIRST (tanpa grouping) */}
                         {(() => {
                             const { settlementTransactions, normalTransactions } = separateTransactions(transactions);
-                            
                             return (
                                 <>
-                                    {/* NORMAL TRANSACTIONS - Seluruh row clickable */}
                                     {normalTransactions.map(t => {
                                         const isInc = t.type === 'in' || t.ref_type === 'transfer_in';
-                                        
                                         return (
-                                            <tr 
-                                                key={t.id}
-                                                onClick={() => handleOpenEditModal(t)}
-                                                className="hover:bg-lumina-highlight/20 transition-colors border-b border-lumina-border/30 cursor-pointer group"
-                                            >
+                                            <tr key={t.id} onClick={() => handleOpenEditModal(t)} className="hover:bg-lumina-highlight/20 transition-colors border-b border-lumina-border/30 cursor-pointer group">
                                                 <td></td>
-                                                <td className="pl-2 font-mono text-xs text-lumina-muted">{new Date(t.date.toDate()).toLocaleDateString()}</td>
+                                                <td className="pl-2 font-mono text-xs text-lumina-muted">{getDateObj(t.date).toLocaleDateString()}</td>
                                                 <td className="font-medium text-lumina-text text-xs">{accounts.find(a=>a.id===t.account_id)?.name || 'Unknown'}</td>
                                                 <td><span className="badge-luxury badge-neutral">{t.category || 'General'}</span></td>
                                                 <td className="text-lumina-muted truncate max-w-xs text-sm">{t.description}</td>
@@ -400,59 +379,28 @@ export default function CashFlowPage() {
                                             </tr>
                                         );
                                     })}
-
-                                    {/* SETTLEMENT TRANSACTIONS - Dengan grouping dan collapse */}
                                     {groupTransactionsByDate(settlementTransactions).map((group) => {
-                                        // ✅ Hitung total amount untuk group ini
                                         const groupTotal = group.items.reduce((sum, item) => sum + (item.amount || 0), 0);
                                         const isInc = groupTotal >= 0;
-                                        
                                         return (
                                             <React.Fragment key={group.date}>
-                                                {/* ✅ HEADER ROW - Header + Summary pada baris yang sama */}
-                                                <tr 
-                                                    onClick={() => toggleDateExpand(group.date)}
-                                                    className="bg-gray-800/40 hover:bg-gray-800/60 cursor-pointer border-t-2 border-lumina-gold/40 transition-colors group/header"
-                                                >
-                                                    <td className="pl-6 text-center">
-                                                        <span className={`inline-block transition-transform duration-300 text-lumina-gold ${expandedDates[group.date] ? 'rotate-180' : ''}`}>
-                                                            ▼
-                                                        </span>
-                                                    </td>
-                                                    <td className="pl-2 py-3">
-                                                        <span className="font-semibold text-lumina-gold text-sm">{group.date}</span>
-                                                    </td>
-                                                    <td colSpan="2">
-                                                        <span className="text-xs text-white bg-orange-600/40 px-3 py-1 rounded border border-orange-500/50">
-                                                            Total Settlement • {group.items.length} invoice
-                                                        </span>
-                                                    </td>
-                                                    <td className="text-lumina-muted text-sm">
-                                                        Settlement sales date {group.date}
-                                                    </td>
-                                                    <td className={`text-right pr-6 font-mono font-bold ${isInc ? 'text-emerald-400' : 'text-lumina-text'}`}>
-                                                        {isInc ? '+' : ''}{formatRupiah(groupTotal)}
-                                                    </td>
+                                                <tr onClick={() => toggleDateExpand(group.date)} className="bg-gray-800/40 hover:bg-gray-800/60 cursor-pointer border-t-2 border-lumina-gold/40 transition-colors group/header">
+                                                    <td className="pl-6 text-center"><span className={`inline-block transition-transform duration-300 text-lumina-gold ${expandedDates[group.date] ? 'rotate-180' : ''}`}>▼</span></td>
+                                                    <td className="pl-2 py-3"><span className="font-semibold text-lumina-gold text-sm">{group.date}</span></td>
+                                                    <td colSpan="2"><span className="text-xs text-white bg-orange-600/40 px-3 py-1 rounded border border-orange-500/50">Total Settlement • {group.items.length} invoice</span></td>
+                                                    <td className="text-lumina-muted text-sm">Settlement sales date {group.date}</td>
+                                                    <td className={`text-right pr-6 font-mono font-bold ${isInc ? 'text-emerald-400' : 'text-lumina-text'}`}>{isInc ? '+' : ''}{formatRupiah(groupTotal)}</td>
                                                 </tr>
-
-                                                {/* Settlement Transaction Items - Seluruh row clickable */}
                                                 {expandedDates[group.date] && group.items.map(t => {
                                                     const isInc = t.type === 'in' || t.ref_type === 'transfer_in';
-                                                    
                                                     return (
-                                                        <tr 
-                                                            key={t.id}
-                                                            onClick={() => handleOpenEditModal(t)}
-                                                            className="hover:bg-orange-900/20 transition-colors border-b border-lumina-border/30 bg-gray-900/50 cursor-pointer group"
-                                                        >
+                                                        <tr key={t.id} onClick={() => handleOpenEditModal(t)} className="hover:bg-orange-900/20 transition-colors border-b border-lumina-border/30 bg-gray-900/50 cursor-pointer group">
                                                             <td></td>
-                                                            <td className="pl-2 font-mono text-xs text-lumina-muted">{new Date(t.date.toDate()).toLocaleDateString()}</td>
+                                                            <td className="pl-2 font-mono text-xs text-lumina-muted">{getDateObj(t.date).toLocaleDateString()}</td>
                                                             <td className="font-medium text-lumina-text text-xs">{accounts.find(a=>a.id===t.account_id)?.name || 'Unknown'}</td>
                                                             <td><span className="badge-luxury badge-neutral text-orange-300 bg-orange-900/30 border-orange-600/50">{t.category || 'General'}</span></td>
                                                             <td className="text-lumina-muted truncate max-w-xs text-sm italic">{t.description}</td>
-                                                            <td className={`text-right pr-6 font-mono font-bold ${isInc ? 'text-emerald-400' : 'text-lumina-text'} group-hover:text-lumina-gold transition-colors`}>
-                                                                {isInc ? '+' : '-'}{formatRupiah(t.amount)}
-                                                            </td>
+                                                            <td className={`text-right pr-6 font-mono font-bold ${isInc ? 'text-emerald-400' : 'text-lumina-text'} group-hover:text-lumina-gold transition-colors`}>{isInc ? '+' : '-'}{formatRupiah(t.amount)}</td>
                                                         </tr>
                                                     );
                                                 })}
@@ -462,13 +410,12 @@ export default function CashFlowPage() {
                                 </>
                             );
                         })()}
-                    </tbody>
-
+                        </tbody>
                     </table>
                 </div>
             </div>
 
-            {/* Modal Edit Transaction */}
+            {/* MODALS (Edit, Expense, Transfer) code remains similar but using cleaned functions */}
             <Portal>
             {modalEditOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">
@@ -479,69 +426,21 @@ export default function CashFlowPage() {
                         </div>
                         <form onSubmit={submitEditTransaction} className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <input 
-                                    type="date" 
-                                    required 
-                                    className="input-luxury" 
-                                    value={editFormData.date} 
-                                    onChange={e=>setEditFormData({...editFormData, date:e.target.value})} 
-                                />
-                                <select 
-                                    className="input-luxury font-bold" 
-                                    value={editFormData.account_id} 
-                                    onChange={e=>setEditFormData({...editFormData, account_id:e.target.value})}
-                                    disabled={editingTransaction?.ref_type === 'transfer_in' || editingTransaction?.ref_type === 'transfer_out'}
-                                >
+                                <input type="date" required className="input-luxury" value={editFormData.date} onChange={e=>setEditFormData({...editFormData, date:e.target.value})} />
+                                <select className="input-luxury font-bold" value={editFormData.account_id} onChange={e=>setEditFormData({...editFormData, account_id:e.target.value})} disabled={editingTransaction?.ref_type?.includes('transfer')}>
                                     <option value="">-- Select Wallet --</option>
                                     {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                                 </select>
                             </div>
-                            
-                            <select 
-                                required 
-                                className="input-luxury" 
-                                value={editFormData.category} 
-                                onChange={e=>setEditFormData({...editFormData, category:e.target.value})}
-                            >
+                            <select required className="input-luxury" value={editFormData.category} onChange={e=>setEditFormData({...editFormData, category:e.target.value})}>
                                 <option value="">-- Select Category --</option>
                                 {categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
                                 <option value="Lainnya">Lainnya</option>
                             </select>
-                            
-                            <textarea 
-                                required 
-                                className="input-luxury" 
-                                placeholder="Description..." 
-                                rows="3"
-                                value={editFormData.description} 
-                                onChange={e=>setEditFormData({...editFormData, description:e.target.value})} 
-                            />
-                            
-                            <input 
-                                type="number" 
-                                required 
-                                className="input-luxury font-bold text-lg text-lumina-gold placeholder-lumina-muted" 
-                                placeholder="Amount (Rp)" 
-                                value={editFormData.amount} 
-                                onChange={e=>setEditFormData({...editFormData, amount:e.target.value})} 
-                            />
-
-                            {/* Info box showing old vs new */}
-                            {editingTransaction && (
-                                <div className="bg-lumina-highlight/30 border border-lumina-gold/30 rounded p-3 text-xs space-y-1">
-                                    <p className="text-lumina-muted">Previous Amount: <span className="text-lumina-text font-bold">{formatRupiah(editingTransaction.amount)}</span></p>
-                                    <p className="text-lumina-gold">New Amount: <span className="font-bold">{formatRupiah(parseInt(editFormData.amount) || 0)}</span></p>
-                                </div>
-                            )}
-                            
+                            <textarea required className="input-luxury" placeholder="Description..." rows="3" value={editFormData.description} onChange={e=>setEditFormData({...editFormData, description:e.target.value})} />
+                            <input type="number" required className="input-luxury font-bold text-lg text-lumina-gold placeholder-lumina-muted" placeholder="Amount (Rp)" value={editFormData.amount} onChange={e=>setEditFormData({...editFormData, amount:e.target.value})} />
                             <div className="flex justify-between gap-3 pt-4 border-t border-lumina-border">
-                                <button 
-                                    type="button" 
-                                    onClick={handleDeleteTransaction}
-                                    className="btn-ghost-dark hover:bg-red-900/30 hover:border-red-500/50 hover:text-red-400 transition-colors"
-                                >
-                                    🗑️ Delete
-                                </button>
+                                <button type="button" onClick={handleDeleteTransaction} className="btn-ghost-dark hover:bg-red-900/30 hover:border-red-500/50 hover:text-red-400 transition-colors">🗑️ Delete</button>
                                 <div className="flex gap-3">
                                     <button type="button" onClick={()=>setModalEditOpen(false)} className="btn-ghost-dark">Cancel</button>
                                     <button type="submit" className="btn-gold">Update</button>
@@ -553,7 +452,6 @@ export default function CashFlowPage() {
             )}
             </Portal>
 
-            {/* Modal Expense */}
             <Portal>
             {modalExpOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">
@@ -576,13 +474,11 @@ export default function CashFlowPage() {
                             </select>
                             <select required className="input-luxury" value={formData.category} onChange={e=>setFormData({...formData, category:e.target.value})}>
                                 <option value="">-- Select Category --</option>
-                                {/* ✅ REAL-TIME DINAMIS dari chart_of_accounts */}
                                 {categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
                                 <option value="Lainnya">Lainnya</option>
                             </select>
                             <input required className="input-luxury" placeholder="Description..." value={formData.description} onChange={e=>setFormData({...formData, description:e.target.value})} />
                             <input type="number" required className="input-luxury font-bold text-lg text-lumina-gold placeholder-lumina-muted" placeholder="Amount (Rp)" value={formData.amount} onChange={e=>setFormData({...formData, amount:e.target.value})} />
-                            
                             <div className="flex justify-end gap-3 pt-4 border-t border-lumina-border">
                                 <button type="button" onClick={()=>setModalExpOpen(false)} className="btn-ghost-dark">Cancel</button>
                                 <button type="submit" className="btn-gold">Save Record</button>
@@ -593,7 +489,6 @@ export default function CashFlowPage() {
             )}
             </Portal>
             
-            {/* Modal Transfer */}
             <Portal>
             {modalTfOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 fade-in">
@@ -621,7 +516,6 @@ export default function CashFlowPage() {
                             </div>
                             <input type="number" required className="input-luxury font-bold text-lg text-white" placeholder="Amount (Rp)" value={tfData.amount} onChange={e=>setTfData({...tfData, amount:e.target.value})} />
                             <input className="input-luxury" placeholder="Notes..." value={tfData.note} onChange={e=>setTfData({...tfData, note:e.target.value})} />
-                            
                             <div className="flex justify-end gap-3 pt-4 border-t border-lumina-border">
                                 <button type="button" onClick={()=>setModalTfOpen(false)} className="btn-ghost-dark">Cancel</button>
                                 <button type="submit" className="btn-gold">Transfer</button>

@@ -1,10 +1,14 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
   "/brands/page": "app/brands/page.js",
+  "/cash/page": "app/cash/page.js",
   "/categories/page": "app/categories/page.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/page": "app/page.js",
   "/products/page": "app/products/page.js",
+  "/purchases-import/page": "app/purchases-import/page.js",
+  "/supplier-sessions/page": "app/supplier-sessions/page.js",
+  "/transactions-history/page": "app/transactions-history/page.js",
   "/variants/page": "app/variants/page.js",
   "/warehouses/page": "app/warehouses/page.js"
 }

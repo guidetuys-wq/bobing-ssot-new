@@ -1,40 +1,112 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, where, limit } from 'firebase/firestore';
 import { sortBySize, formatRupiah } from '@/lib/utils';
 import { Portal } from '@/lib/usePortal';
 
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_variants_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
+
 export default function VariantsPage() {
     const [variants, setVariants] = useState([]);
-    const [products, setProducts] = useState([]);
+    const [products, setProducts] = useState([]); // Parent lookup
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedBaseSku, setSelectedBaseSku] = useState('-');
 
-    useEffect(() => { fetchData(); }, []);
-    const fetchData = async () => {
+    useEffect(() => { 
+        fetchData(); 
+    }, []);
+
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
         try {
-            const [snapProd, snapVar] = await Promise.all([getDocs(query(collection(db, "products"), orderBy("name"))), getDocs(query(collection(db, "product_variants"), orderBy("sku")))]);
-            const ps = []; snapProd.forEach(d => ps.push({id:d.id, ...d.data()})); setProducts(ps);
-            const vs = []; snapVar.forEach(d => vs.push({id:d.id, ...d.data()})); setVariants(vs);
-        } catch(e){console.error(e)} finally {setLoading(false)}
+            // 1. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { variants: cVariants, products: cProducts, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setVariants(cVariants);
+                        setProducts(cProducts);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Fetch Firebase
+            const [snapProd, snapVar] = await Promise.all([
+                getDocs(query(collection(db, "products"), orderBy("name"))), // Master Product (usahakan load semua utk lookup)
+                getDocs(query(collection(db, "product_variants"), orderBy("sku"), limit(100))) // Limit Variant
+            ]);
+
+            const ps = []; 
+            snapProd.forEach(d => ps.push({id:d.id, ...d.data()}));
+            
+            const vs = []; 
+            snapVar.forEach(d => vs.push({id:d.id, ...d.data()}));
+
+            setProducts(ps);
+            setVariants(vs);
+
+            // 3. Simpan Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                variants: vs,
+                products: ps,
+                timestamp: Date.now()
+            }));
+
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
     
-    const handleParentChange = (e) => { const p = products.find(x=>x.id===e.target.value); setFormData({...formData, product_id: e.target.value}); setSelectedBaseSku(p?p.base_sku:'-'); };
+    const handleParentChange = (e) => { 
+        const p = products.find(x=>x.id===e.target.value); 
+        setFormData({...formData, product_id: e.target.value}); 
+        setSelectedBaseSku(p?p.base_sku:'-'); 
+    };
+
     const generateSku = () => {
-        const c = formData.color?.toUpperCase().replace(/\s/g,'-'); const s = formData.size?.toUpperCase().replace(/\s/g,'-');
+        const c = formData.color?.toUpperCase().replace(/\s/g,'-'); 
+        const s = formData.size?.toUpperCase().replace(/\s/g,'-');
         if(selectedBaseSku!=='-' && c && s) setFormData({...formData, sku: `${selectedBaseSku}-${c}-${s}`});
     };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const pl = {...formData, updated_at: serverTimestamp(), weight: Number(formData.weight)||0, cost: Number(formData.cost), price: Number(formData.price)};
-            if(formData.id) await updateDoc(doc(db,"product_variants",formData.id), pl); else { pl.created_at=serverTimestamp(); await addDoc(collection(db,"product_variants"), pl); }
-            setModalOpen(false); fetchData();
-        } catch(e){alert(e.message)}
+            const pl = {
+                ...formData, 
+                updated_at: serverTimestamp(), 
+                weight: Number(formData.weight)||0, 
+                cost: Number(formData.cost), 
+                price: Number(formData.price)
+            };
+            
+            if(formData.id) {
+                await updateDoc(doc(db,"product_variants",formData.id), pl); 
+            } else { 
+                pl.created_at=serverTimestamp(); 
+                await addDoc(collection(db,"product_variants"), pl); 
+            }
+            
+            // Reset Cache
+            sessionStorage.removeItem(CACHE_KEY);
+            // Juga reset cache halaman lain yang pakai variant (misal: inventory, POS)
+            sessionStorage.removeItem('lumina_inventory_data');
+            sessionStorage.removeItem('lumina_pos_master_data');
+
+            setModalOpen(false); 
+            fetchData(true);
+        } catch(e){ alert(e.message); }
     };
 
     return (
@@ -43,7 +115,9 @@ export default function VariantsPage() {
                 <h2 className="text-2xl font-bold text-lumina-text">Master SKU</h2>
                 <button onClick={()=>{setFormData({product_id:'',sku:'',color:'',size:'',cost:0,price:0,status:'active'}); setModalOpen(true);}} className="btn-gold">Add SKU</button>
             </div>
-            <div className="bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg max-w-md"><input className="w-full bg-transparent text-lumina-text px-3 py-1 outline-none" placeholder="Search SKU..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /></div>
+            <div className="bg-lumina-surface border border-lumina-border p-2 rounded-xl shadow-lg max-w-md">
+                <input className="w-full bg-transparent text-lumina-text px-3 py-1 outline-none" placeholder="Search SKU..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} />
+            </div>
 
             <div className="card-luxury overflow-hidden">
                 <table className="table-dark w-full">

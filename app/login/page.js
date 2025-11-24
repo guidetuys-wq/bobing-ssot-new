@@ -13,12 +13,16 @@ export default function LoginPage() {
   const router = useRouter();
   const { user } = useAuth();
 
-  useEffect(() => { if (user) router.push('/dashboard'); }, [user, router]);
+  // Redirect jika sudah login
+  useEffect(() => { 
+    if (user) router.push('/dashboard'); 
+  }, [user, router]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
+      // Auth tidak memakan kuota Firestore Reads
       await signInWithEmailAndPassword(auth, email, password);
       router.push('/dashboard');
     } catch (error) {

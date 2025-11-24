@@ -2,8 +2,12 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, writeBatch, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_customers_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function CustomersPage() {
     const [customers, setCustomers] = useState([]);
@@ -12,28 +16,70 @@ export default function CustomersPage() {
     const [formData, setFormData] = useState({});
     const [scanning, setScanning] = useState(false);
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        fetchData(); 
+    }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
         try {
-            const q = query(collection(db, "customers"), orderBy("name", "asc"));
+            // 1. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { data, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setCustomers(data);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Fetch Data (Limit 100)
+            const q = query(
+                collection(db, "customers"), 
+                orderBy("name", "asc"),
+                limit(100) // Safety limit
+            );
+            
             const snap = await getDocs(q);
             const data = [];
             snap.forEach(d => data.push({id: d.id, ...d.data()}));
+            
             setCustomers(data);
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+
+            // 3. Simpan Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                data: data,
+                timestamp: Date.now()
+            }));
+
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const scanFromSales = async () => {
-        if(!confirm("Scan riwayat penjualan untuk data pelanggan baru?")) return;
+        if(!confirm("Scan 500 transaksi terakhir untuk data pelanggan baru?")) return;
         setScanning(true);
         try {
-            const snapSales = await getDocs(collection(db, "sales_orders"));
+            // OPTIMASI: Jangan ambil semua sales, cukup 500 terakhir
+            const qSales = query(
+                collection(db, "sales_orders"), 
+                orderBy("order_date", "desc"), 
+                limit(500)
+            );
+            const snapSales = await getDocs(qSales);
+            
             const newCandidates = {};
             snapSales.forEach(doc => {
                 const s = doc.data();
                 const name = s.customer_name || '';
                 const phone = s.customer_phone || '';
+                // Filter data valid
                 if (phone.length > 9 && !phone.includes('*') && !name.includes('*')) {
                     if (!newCandidates[phone]) {
                         newCandidates[phone] = { name, phone, address: s.shipping_address || '', type: 'end_customer' };
@@ -45,7 +91,7 @@ export default function CustomersPage() {
             const finalToAdd = Object.values(newCandidates).filter(c => !existingPhones.has(c.phone));
 
             if (finalToAdd.length === 0) {
-                alert("Scan selesai. Tidak ditemukan data baru.");
+                alert("Scan selesai. Tidak ditemukan data baru dari 500 transaksi terakhir.");
             } else {
                 const batch = writeBatch(db);
                 finalToAdd.forEach(c => {
@@ -53,10 +99,18 @@ export default function CustomersPage() {
                     batch.set(ref, { ...c, created_at: serverTimestamp(), source: 'auto_scan' });
                 });
                 await batch.commit();
+                
+                // Reset cache karena ada data baru
+                sessionStorage.removeItem(CACHE_KEY);
+                
                 alert(`Berhasil menyimpan ${finalToAdd.length} pelanggan baru!`);
-                fetchData();
+                fetchData(true);
             }
-        } catch (e) { alert(e.message); } finally { setScanning(false); }
+        } catch (e) { 
+            alert(e.message); 
+        } finally { 
+            setScanning(false); 
+        }
     };
 
     const openModal = (cust = null) => {
@@ -74,14 +128,29 @@ export default function CustomersPage() {
                 address: formData.address,
                 updated_at: serverTimestamp()
             };
-            if (formData.id) await updateDoc(doc(db, "customers", formData.id), payload);
-            else { payload.created_at = serverTimestamp(); await addDoc(collection(db, "customers"), payload); }
-            setModalOpen(false); fetchData();
+            if (formData.id) {
+                await updateDoc(doc(db, "customers", formData.id), payload);
+            } else { 
+                payload.created_at = serverTimestamp(); 
+                await addDoc(collection(db, "customers"), payload); 
+            }
+            
+            // Reset cache
+            sessionStorage.removeItem(CACHE_KEY);
+            
+            setModalOpen(false); 
+            fetchData(true);
         } catch (e) { alert(e.message); }
     };
 
     const deleteItem = async (id) => {
-        if(confirm("Hapus pelanggan?")) { await deleteDoc(doc(db, "customers", id)); fetchData(); }
+        if(confirm("Hapus pelanggan?")) { 
+            await deleteDoc(doc(db, "customers", id)); 
+            
+            // Reset cache
+            sessionStorage.removeItem(CACHE_KEY);
+            fetchData(true); 
+        }
     };
 
     return (
@@ -94,7 +163,7 @@ export default function CustomersPage() {
                 </div>
                 <div className="flex gap-2">
                     <button onClick={scanFromSales} disabled={scanning} className="btn-ghost-dark text-xs">
-                        {scanning ? 'Scanning...' : 'Scan Sales'}
+                        {scanning ? 'Scanning...' : 'Scan Recent Sales'}
                     </button>
                     <button onClick={() => openModal()} className="btn-gold">
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
@@ -117,7 +186,9 @@ export default function CustomersPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {loading ? <tr><td colSpan="5" className="text-center py-12 text-lumina-muted">Loading...</td></tr> : customers.map(c => {
+                            {loading ? (
+                                <tr><td colSpan="5" className="text-center py-12 text-lumina-muted">Loading...</td></tr>
+                            ) : customers.map(c => {
                                 let badgeClass = 'badge-neutral';
                                 if(c.type === 'reseller') badgeClass = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
                                 if(c.type === 'vip') badgeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20';

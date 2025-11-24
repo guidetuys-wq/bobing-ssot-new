@@ -1,9 +1,14 @@
+// app/finance-accounts/page.js
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, serverTimestamp, updateDoc, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_finance_accounts';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function FinanceAccountsPage() {
   const [accounts, setAccounts] = useState([]);
@@ -30,19 +35,42 @@ export default function FinanceAccountsPage() {
     fetchAccounts();
   }, []);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = async (forceRefresh = false) => {
+    setLoading(true);
     try {
-      setLoading(true);
+      // 1. Cek Cache
+      if (!forceRefresh) {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < CACHE_DURATION) {
+            setAccounts(data);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      // 2. Fetch Data
       const q = query(
         collection(db, 'chart_of_accounts'),
-        orderBy('code', 'asc')
+        orderBy('code', 'asc'),
+        limit(200) // Safety limit untuk COA
       );
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
       setAccounts(data);
+
+      // 3. Simpan Cache
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+        data: data,
+        timestamp: Date.now()
+      }));
+
     } catch (error) {
       console.error('Error fetching accounts:', error);
     } finally {
@@ -66,7 +94,11 @@ export default function FinanceAccountsPage() {
         status: newStatus,
         updated_at: serverTimestamp(),
       });
-      fetchAccounts();
+      
+      // Reset cache & refresh
+      sessionStorage.removeItem(CACHE_KEY);
+      fetchAccounts(true);
+      
     } catch (error) {
       console.error('Error updating status:', error);
       alert('Error updating status: ' + error.message);
@@ -118,7 +150,11 @@ export default function FinanceAccountsPage() {
       });
 
       setModalOpen(false);
-      fetchAccounts();
+      
+      // Reset cache & refresh
+      sessionStorage.removeItem(CACHE_KEY);
+      fetchAccounts(true);
+      
       alert('Akun berhasil ditambahkan!');
     } catch (error) {
       console.error('Error saving account:', error);
@@ -132,7 +168,11 @@ export default function FinanceAccountsPage() {
     if (confirm('Hapus akun ini? Tindakan ini tidak dapat dibatalkan!')) {
       try {
         await deleteDoc(doc(db, 'chart_of_accounts', id));
-        fetchAccounts();
+        
+        // Reset cache & refresh
+        sessionStorage.removeItem(CACHE_KEY);
+        fetchAccounts(true);
+        
         alert('Akun berhasil dihapus!');
       } catch (error) {
         console.error('Error deleting account:', error);

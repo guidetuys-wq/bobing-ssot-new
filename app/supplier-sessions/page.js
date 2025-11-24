@@ -1,12 +1,14 @@
-// app/supplier-sessions/page.js
 "use client";
 import { useState, useEffect, useRef } from 'react';
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, doc, runTransaction, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, runTransaction, query, orderBy, serverTimestamp, limit } from 'firebase/firestore';
 import { sortBySize } from '@/lib/utils';
 import Sortable from 'sortablejs';
 import { Portal } from '@/lib/usePortal';
 
+// Cache Configuration
+const CACHE_KEY = 'lumina_virtual_stock_master';
+const CACHE_DURATION = 5 * 60 * 1000; 
 
 export default function VirtualStockPage() {
     const [suppliers, setSuppliers] = useState([]);
@@ -23,20 +25,24 @@ export default function VirtualStockPage() {
     const [currentModalProd, setCurrentModalProd] = useState(null);
     const [modalUpdates, setModalUpdates] = useState({});
 
-
     useEffect(() => { fetchData(); }, []);
 
-    // ✅ Set default supplier ke Mas Tohir setelah data loaded
+    // Set default supplier
     useEffect(() => {
         if (suppliers.length > 0 && !selectedSupplierId) {
             const masTohir = suppliers.find(s => s.name === 'Mas Tohir');
             if (masTohir) {
                 setSelectedSupplierId(masTohir.id);
-                handleSupplierChange({ target: { value: masTohir.id } });
             }
         }
     }, [suppliers]);
 
+    // Trigger load products when supplier selected
+    useEffect(() => {
+        if(selectedSupplierId) {
+            handleSupplierChange(selectedSupplierId);
+        }
+    }, [selectedSupplierId]);
 
     useEffect(() => {
         if (gridRef.current && visibleProducts.length > 0) {
@@ -44,32 +50,69 @@ export default function VirtualStockPage() {
         }
     }, [visibleProducts]);
 
-
     const fetchData = async () => {
         try {
+            // 1. Cek Cache
+            const cached = sessionStorage.getItem(CACHE_KEY);
+            if (cached) {
+                const { suppliers, warehouses, products, variants, timestamp } = JSON.parse(cached);
+                if (Date.now() - timestamp < CACHE_DURATION) {
+                    setSuppliers(suppliers);
+                    setWarehouses(warehouses);
+                    setProducts(products);
+                    setVariants(variants);
+                    // Snapshots tetap fetch fresh
+                    const sSnap = await getDocs(collection(db, "stock_snapshots"));
+                    const snaps = {}; 
+                    sSnap.forEach(d => snaps[d.id] = d.data());
+                    setSnapshots(snaps);
+                    return;
+                }
+            }
+
+            // 2. Fetch Fresh
             const [sSupp, sWh, sProd, sVar, sSnap] = await Promise.all([
                 getDocs(query(collection(db, "suppliers"), orderBy("name"))),
                 getDocs(collection(db, "warehouses")),
-                getDocs(collection(db, "products")),
+                getDocs(query(collection(db, "products"), limit(100))), // Limit products
                 getDocs(query(collection(db, "product_variants"), orderBy("sku"))),
                 getDocs(collection(db, "stock_snapshots"))
             ]);
-            const supps = []; sSupp.forEach(d => supps.push({id: d.id, ...d.data()})); setSuppliers(supps);
-            const whs = []; sWh.forEach(d => whs.push({id: d.id, ...d.data()})); setWarehouses(whs);
-            const prods = []; sProd.forEach(d => prods.push({id: d.id, ...d.data()})); setProducts(prods);
-            const vars = []; sVar.forEach(d => vars.push({id: d.id, ...d.data()})); setVariants(vars);
-            const snaps = {}; sSnap.forEach(d => snaps[d.id] = d.data()); setSnapshots(snaps);
+
+            const supps = []; sSupp.forEach(d => supps.push({id: d.id, ...d.data()}));
+            const whs = []; sWh.forEach(d => whs.push({id: d.id, ...d.data()}));
+            const prods = []; sProd.forEach(d => prods.push({id: d.id, ...d.data()}));
+            const vars = []; sVar.forEach(d => vars.push({id: d.id, ...d.data()}));
+            const snaps = {}; sSnap.forEach(d => snaps[d.id] = d.data());
+
+            setSuppliers(supps);
+            setWarehouses(whs);
+            setProducts(prods);
+            setVariants(vars);
+            setSnapshots(snaps);
+
+            // 3. Save Cache (Exclude snapshots because they change frequently)
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                suppliers: supps,
+                warehouses: whs,
+                products: prods,
+                variants: vars,
+                timestamp: Date.now()
+            }));
+
         } catch (e) { console.error(e); }
     };
 
-
-    const handleSupplierChange = (e) => {
-        const suppId = e.target.value;
-        setSelectedSupplierId(suppId);
+    const handleSupplierChange = (suppId) => {
         if (!suppId) { setVisibleProducts([]); return; }
         const wh = warehouses.find(w => w.type === 'virtual_supplier' && w.supplier_id === suppId);
-        if (!wh) { alert("Supplier ini belum punya Gudang Virtual."); return; }
-
+        
+        if (!wh) { 
+            // Don't alert immediately on auto-select to avoid spam
+            // alert("Supplier ini belum punya Gudang Virtual."); 
+            setVisibleProducts([]);
+            return; 
+        }
 
         const grouped = {};
         variants.forEach(v => {
@@ -85,42 +128,7 @@ export default function VirtualStockPage() {
         setVisibleProducts(Object.values(grouped).sort((a,b) => (a.base_sku||'').localeCompare(b.base_sku||'')));
     };
 
-
     const openModal = (prod) => { setCurrentModalProd(prod); setModalUpdates({}); setModalOpen(true); };
-
-    // ✅ Calculate total updates
-    const calculateUpdatesSummary = () => {
-        const wh = warehouses.find(w => w.type === 'virtual_supplier' && w.supplier_id === selectedSupplierId);
-        let totalItemsChanged = 0;
-        let totalQtyBefore = 0;
-        let totalQtyAfter = 0;
-
-        Object.keys(modalUpdates).forEach(vid => {
-            const newQty = parseInt(modalUpdates[vid]);
-            const oldQty = snapshots[`${vid}_${wh.id}`]?.qty || 0;
-            
-            if (!isNaN(newQty) && newQty !== oldQty) {
-                totalItemsChanged++;
-                totalQtyBefore += oldQty;
-                totalQtyAfter += newQty;
-            }
-        });
-
-        // Also count unchanged items
-        const totalItems = currentModalProd?.variants.length || 0;
-
-        return {
-            itemsChanged: totalItemsChanged,
-            totalItems: totalItems,
-            totalQtyBefore,
-            totalQtyAfter,
-            totalDiff: totalQtyAfter - totalQtyBefore,
-            hasChanges: totalItemsChanged > 0
-        };
-    };
-
-    const summary = calculateUpdatesSummary();
-
 
     const saveModal = async () => {
         const wh = warehouses.find(w => w.type === 'virtual_supplier' && w.supplier_id === selectedSupplierId);
@@ -132,11 +140,10 @@ export default function VirtualStockPage() {
         });
         if(updates.length === 0) { setModalOpen(false); return; }
 
-
         try {
             await runTransaction(db, async (t) => {
                 const sessRef = doc(collection(db, "supplier_stock_sessions"));
-                t.set(sessRef, { supplier_id: selectedSupplierId, warehouse_id: wh.id, date: serverTimestamp(), created_by: auth.currentUser?.email, type: 'overwrite' });
+                t.set(sessRef, { supplier_id: selectedSupplierId, warehouse_id: wh.id, date: serverTimestamp(), created_by: user?.email, type: 'overwrite' });
                 for(const up of updates) {
                     const k = `${up.variantId}_${wh.id}`;
                     const snapRef = doc(db, "stock_snapshots", k);
@@ -145,10 +152,13 @@ export default function VirtualStockPage() {
                     if(sDoc.exists()) t.update(snapRef, { qty: up.real, updated_at: serverTimestamp() }); else t.set(snapRef, { id: k, variant_id: up.variantId, warehouse_id: wh.id, qty: up.real, updated_at: serverTimestamp() });
                 }
             });
-            alert("Stok terupdate!"); setModalOpen(false); fetchData();
+            alert("Stok terupdate!"); 
+            setModalOpen(false); 
+            // Invalidate cache stock
+            sessionStorage.removeItem('lumina_inventory_data'); 
+            fetchData(); // Refresh snapshots
         } catch(e) { alert(e.message); }
     };
-
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 fade-in pb-20">
@@ -157,12 +167,11 @@ export default function VirtualStockPage() {
                     <h2 className="text-2xl font-display font-bold text-lumina-text tracking-tight">Virtual Stock Map</h2>
                     <p className="text-sm text-lumina-muted mt-1 font-light">Drag & Drop cards to organize supplier products.</p>
                 </div>
-                <select className="input-luxury w-full sm:w-64 font-medium" value={selectedSupplierId} onChange={handleSupplierChange}>
+                <select className="input-luxury w-full sm:w-64 font-medium" value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)}>
                     <option value="">-- Select Supplier --</option>
                     {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
             </div>
-
 
             {selectedSupplierId && (
                 <div ref={gridRef} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

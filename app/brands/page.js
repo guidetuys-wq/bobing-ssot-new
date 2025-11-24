@@ -1,8 +1,14 @@
+// app/brands/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+// Menambahkan 'limit' pada import
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_brands_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function BrandsPage() {
     const [brands, setBrands] = useState([]);
@@ -10,16 +16,135 @@ export default function BrandsPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
 
-    useEffect(() => { fetchData(); }, []);
-    const fetchData = async () => { try { const s = await getDocs(query(collection(db, "brands"), orderBy("name"))); const d=[]; s.forEach(x=>d.push({id:x.id,...x.data()})); setBrands(d); } catch(e){} finally{setLoading(false)} };
-    const handleSubmit = async (e) => { e.preventDefault(); try { if(formData.id) await updateDoc(doc(db,"brands",formData.id), formData); else await addDoc(collection(db,"brands"), {...formData, created_at: serverTimestamp()}); setModalOpen(false); fetchData(); } catch(e){alert(e.message)} };
+    useEffect(() => { 
+        fetchData(); 
+    }, []);
+
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
+        try {
+            // 1. Cek Cache Dulu (Hemat Reads)
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { data, timestamp } = JSON.parse(cached);
+                    // Jika cache belum kadaluarsa (kurang dari 5 menit)
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setBrands(data);
+                        setLoading(false);
+                        console.log("Brands loaded from Cache (0 Reads)");
+                        return; // Stop, jangan panggil Firebase
+                    }
+                }
+            }
+
+            // 2. Panggil Firebase (Jika tidak ada cache atau forceRefresh)
+            // Menambahkan limit(100) untuk keamanan kuota
+            const q = query(
+                collection(db, "brands"), 
+                orderBy("name"), 
+                limit(100) 
+            );
+            
+            const s = await getDocs(q);
+            const d = []; 
+            s.forEach(x => d.push({id:x.id, ...x.data()}));
+            
+            setBrands(d);
+
+            // 3. Simpan hasil ke Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                data: d,
+                timestamp: Date.now()
+            }));
+            console.log("Brands fetched from Firebase (Reads charged)");
+
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSubmit = async (e) => { 
+        e.preventDefault(); 
+        try { 
+            if(formData.id) {
+                await updateDoc(doc(db,"brands",formData.id), formData);
+            } else {
+                await addDoc(collection(db,"brands"), {...formData, created_at: serverTimestamp()}); 
+            }
+            
+            // Hapus cache agar data terbaru termuat ulang
+            sessionStorage.removeItem(CACHE_KEY);
+            
+            setModalOpen(false); 
+            fetchData(true); // Force refresh true
+        } catch(e) {
+            alert(e.message);
+        } 
+    };
 
     return (
         <div className="max-w-5xl mx-auto space-y-6 fade-in">
-            <div className="flex justify-between items-center"><h2 className="text-2xl font-bold text-lumina-text">Brands</h2><button onClick={()=>{setFormData({name:'',type:'own_brand'}); setModalOpen(true)}} className="btn-gold">Add Brand</button></div>
-            <div className="card-luxury overflow-hidden"><table className="table-dark w-full"><thead><tr><th className="pl-6">Name</th><th>Type</th><th className="text-right pr-6">Act</th></tr></thead><tbody>{brands.map(b=><tr key={b.id}><td className="pl-6 text-white font-medium">{b.name}</td><td><span className="badge-luxury badge-neutral">{b.type}</span></td><td className="text-right pr-6"><button onClick={()=>{setFormData({...b}); setModalOpen(true)}} className="text-xs text-lumina-gold">Edit</button></td></tr>)}</tbody></table></div>
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-lumina-text">Brands</h2>
+                <button onClick={()=>{setFormData({name:'',type:'own_brand'}); setModalOpen(true)}} className="btn-gold">Add Brand</button>
+            </div>
+            
+            <div className="card-luxury overflow-hidden">
+                <table className="table-dark w-full">
+                    <thead>
+                        <tr>
+                            <th className="pl-6">Name</th>
+                            <th>Type</th>
+                            <th className="text-right pr-6">Act</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <tr><td colSpan="3" className="text-center py-4 text-lumina-muted">Loading...</td></tr>
+                        ) : brands.map(b => (
+                            <tr key={b.id}>
+                                <td className="pl-6 text-white font-medium">{b.name}</td>
+                                <td><span className="badge-luxury badge-neutral">{b.type}</span></td>
+                                <td className="text-right pr-6">
+                                    <button onClick={()=>{setFormData({...b}); setModalOpen(true)}} className="text-xs text-lumina-gold">Edit</button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
             <Portal>
-                {modalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><div className="bg-lumina-surface border border-lumina-border rounded-2xl p-6 w-full max-w-sm"><h3 className="text-lg font-bold text-white mb-4">Brand Form</h3><form onSubmit={handleSubmit} className="space-y-4"><input className="input-luxury" placeholder="Brand Name" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})}/><select className="input-luxury" value={formData.type} onChange={e=>setFormData({...formData,type:e.target.value})}><option value="own_brand">Own Brand</option><option value="supplier_brand">Supplier</option></select><div className="flex justify-end gap-2"><button type="button" onClick={()=>setModalOpen(false)} className="btn-ghost-dark">Cancel</button><button className="btn-gold">Save</button></div></form></div></div>}
+                {modalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+                        <div className="bg-lumina-surface border border-lumina-border rounded-2xl p-6 w-full max-w-sm">
+                            <h3 className="text-lg font-bold text-white mb-4">Brand Form</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <input 
+                                    className="input-luxury" 
+                                    placeholder="Brand Name" 
+                                    value={formData.name} 
+                                    onChange={e=>setFormData({...formData,name:e.target.value})}
+                                />
+                                <select 
+                                    className="input-luxury" 
+                                    value={formData.type} 
+                                    onChange={e=>setFormData({...formData,type:e.target.value})}
+                                >
+                                    <option value="own_brand">Own Brand</option>
+                                    <option value="supplier_brand">Supplier</option>
+                                </select>
+                                <div className="flex justify-end gap-2">
+                                    <button type="button" onClick={()=>setModalOpen(false)} className="btn-ghost-dark">Cancel</button>
+                                    <button className="btn-gold">Save</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
             </Portal>
         </div>
     );

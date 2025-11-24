@@ -1,10 +1,13 @@
-// app/purchases-import/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, doc, writeBatch, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, writeBatch, serverTimestamp, query, orderBy, increment } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import * as XLSX from 'xlsx';
+
+// Konfigurasi Cache
+const CACHE_VARIANTS = 'lumina_import_variants_cache';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function ImportPurchasesPage() {
     const { user } = useAuth();
@@ -26,22 +29,53 @@ export default function ImportPurchasesPage() {
 
     const addLog = (msg, type='info') => setLogs(prev => [...prev, {msg, type}]);
 
+    // Fungsi Invalidate Cache agar data di halaman lain update
+    const invalidateCaches = () => {
+        sessionStorage.removeItem('lumina_inventory_data'); // Stok berubah
+        sessionStorage.removeItem('lumina_balance_data');   // Hutang berubah
+        sessionStorage.removeItem('lumina_purchases_history'); // History berubah
+        console.log("Cache invalidation complete.");
+    };
+
+    const getMasterVariants = async () => {
+        // 1. Cek Cache
+        const cached = sessionStorage.getItem(CACHE_VARIANTS);
+        if (cached) {
+            const { varMap, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < CACHE_DURATION) {
+                addLog("Menggunakan data varian dari Cache...", "info");
+                return varMap;
+            }
+        }
+
+        // 2. Fetch Firebase
+        addLog("Mengambil data master varian terbaru...", "info");
+        const varSnap = await getDocs(collection(db, "product_variants"));
+        const varMap = {};
+        varSnap.forEach(d => {
+            const v = d.data();
+            if(v.sku) varMap[v.sku.toUpperCase().trim()] = { id: d.id, ...v };
+        });
+
+        // 3. Simpan Cache
+        sessionStorage.setItem(CACHE_VARIANTS, JSON.stringify({
+            varMap,
+            timestamp: Date.now()
+        }));
+
+        return varMap;
+    };
+
     const handleFile = async (e) => {
         const file = e.target.files[0];
         if (!file || !selectedWh) return alert("Pilih gudang dan file!");
         
         setProcessing(true);
         setLogs([]);
-        addLog("Membaca file...", "info");
-
+        
         try {
-            // 1. Load Master Variants
-            const varSnap = await getDocs(collection(db, "product_variants"));
-            const varMap = {};
-            varSnap.forEach(d => {
-                const v = d.data();
-                if(v.sku) varMap[v.sku.toUpperCase().trim()] = { id: d.id, ...v };
-            });
+            // 1. Load Master Variants (Cached)
+            const varMap = await getMasterVariants();
 
             // 2. Read File
             const reader = new FileReader();
@@ -57,7 +91,7 @@ export default function ImportPurchasesPage() {
                 rows.forEach(row => {
                     // Auto detect keys (case insensitive)
                     const keys = Object.keys(row);
-                    const kInv = keys.find(k => k.match(/invoice|stock in id/i));
+                    const kInv = keys.find(k => k.match(/invoice|stock in id|ref/i));
                     const kSku = keys.find(k => k.match(/sku|varian id/i));
                     const kQty = keys.find(k => k.match(/qty|jumlah/i));
                     const kCost = keys.find(k => k.match(/cost|harga/i));
@@ -73,8 +107,10 @@ export default function ImportPurchasesPage() {
                     }
                 });
 
-                // 4. Process Groups
-                const batch = writeBatch(db);
+                // 4. Process Groups (With Batch Chunking)
+                // Firebase Batch Limit = 500 operations. Kita commit setiap 450.
+                let batch = writeBatch(db);
+                let opCount = 0; // Counter operasi dalam batch saat ini
                 let poCount = 0;
 
                 for (const [inv, items] of Object.entries(groups)) {
@@ -94,6 +130,7 @@ export default function ImportPurchasesPage() {
                     });
 
                     if (validItems.length > 0) {
+                        // A. Create PO Header (1 Op)
                         const poRef = doc(collection(db, "purchase_orders"));
                         batch.set(poRef, {
                             supplier_name: 'Imported',
@@ -107,24 +144,53 @@ export default function ImportPurchasesPage() {
                             created_at: serverTimestamp(),
                             created_by: user?.email
                         });
+                        opCount++;
 
-                        validItems.forEach(item => {
+                        // FIXED: Menggunakan for...of agar bisa await di dalam loop
+                        for (const item of validItems) {
+                            // B. Create PO Item (1 Op)
                             const itemRef = doc(collection(db, `purchase_orders/${poRef.id}/items`));
                             batch.set(itemRef, { variant_id: item.variant_id, qty: item.qty, unit_cost: item.cost, subtotal: item.qty*item.cost });
+                            opCount++;
 
+                            // C. Create Movement (1 Op)
                             const moveRef = doc(collection(db, "stock_movements"));
                             batch.set(moveRef, {
                                 variant_id: item.variant_id, warehouse_id: selectedWh, type: 'purchase_in',
                                 qty: item.qty, unit_cost: item.cost, ref_id: poRef.id, ref_type: 'purchase_order',
                                 date: serverTimestamp(), notes: `Import ${inv}`
                             });
-                        });
+                            opCount++;
+
+                            // D. Update/Set Stock Snapshot (1 Op) - FIX PENTING!
+                            // Menggunakan increment agar atomic dan tidak perlu read dulu
+                            const snapRef = doc(db, "stock_snapshots", `${item.variant_id}_${selectedWh}`);
+                            batch.set(snapRef, { 
+                                id: `${item.variant_id}_${selectedWh}`,
+                                variant_id: item.variant_id, 
+                                warehouse_id: selectedWh, 
+                                qty: increment(item.qty) // Menambah stok otomatis
+                            }, { merge: true });
+                            opCount++;
+
+                            // Safety Check: Commit jika mendekati limit 500
+                            if (opCount >= 450) {
+                                await batch.commit();
+                                batch = writeBatch(db); // Reset batch
+                                opCount = 0;
+                                addLog(`...menyimpan batch sebagian...`, "warning");
+                            }
+                        }
+                        
                         poCount++;
                         addLog(`[OK] PO ${inv}: ${validItems.length} items`, "success");
                     }
                 }
 
-                await batch.commit();
+                // Commit sisa operasi
+                if (opCount > 0) await batch.commit();
+                
+                invalidateCaches();
                 addLog(`SELESAI! Berhasil import ${poCount} PO.`, "success");
                 setProcessing(false);
             };

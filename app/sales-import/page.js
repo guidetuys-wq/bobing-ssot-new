@@ -1,10 +1,13 @@
-// app/sales-import/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, doc, writeBatch, serverTimestamp, query, where, orderBy, runTransaction } from 'firebase/firestore';
+import { collection, getDocs, doc, writeBatch, serverTimestamp, query, where, orderBy, increment } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import * as XLSX from 'xlsx';
+
+// Konfigurasi Cache
+const CACHE_VARIANTS = 'lumina_import_variants_cache'; // Shared cache dengan purchase import
+const CACHE_DURATION = 5 * 60 * 1000;
 
 export default function ImportSalesPage() {
     const { user } = useAuth();
@@ -16,6 +19,7 @@ export default function ImportSalesPage() {
 
     useEffect(() => {
         const init = async () => {
+            // Load dropdown data (Ringan, tidak perlu cache berat)
             const whSnap = await getDocs(query(collection(db, "warehouses"), orderBy("created_at")));
             const whData = []; whSnap.forEach(d => { if(d.data().type!=='virtual_supplier') whData.push({id:d.id, ...d.data()}) });
             setWarehouses(whData);
@@ -32,6 +36,38 @@ export default function ImportSalesPage() {
 
     const addLog = (msg, type='info') => setLogs(prev => [...prev, {msg, type}]);
 
+    // Invalidate Cache
+    const invalidateCaches = () => {
+        sessionStorage.removeItem('lumina_inventory_data'); // Stok berkurang
+        sessionStorage.removeItem('lumina_balance_data');   // Kas bertambah
+        sessionStorage.removeItem('lumina_cash_accounts');  // Saldo akun berubah
+        sessionStorage.removeItem('lumina_cash_transactions'); // History kas berubah
+        // Kita tidak cache sales history di dashboard/transaction list secara full, jadi aman.
+        console.log("Caches invalidated.");
+    };
+
+    const getMasterVariants = async () => {
+        const cached = sessionStorage.getItem(CACHE_VARIANTS);
+        if (cached) {
+            const { varMap, timestamp } = JSON.parse(cached);
+            if (Date.now() - timestamp < CACHE_DURATION) {
+                addLog("Menggunakan data varian dari Cache...", "info");
+                return varMap;
+            }
+        }
+
+        addLog("Mengambil data master varian...", "info");
+        const vSnap = await getDocs(collection(db, "product_variants"));
+        const varMap = {};
+        vSnap.forEach(d => { 
+            const v=d.data(); 
+            if(v.sku) varMap[v.sku.toUpperCase().trim()] = {id:d.id, ...v}; 
+        });
+
+        sessionStorage.setItem(CACHE_VARIANTS, JSON.stringify({ varMap, timestamp: Date.now() }));
+        return varMap;
+    };
+
     const handleFile = async (e) => {
         const file = e.target.files[0];
         if (!file || !config.warehouse_id || !config.account_id) return alert("Lengkapi konfigurasi gudang & akun!");
@@ -39,13 +75,10 @@ export default function ImportSalesPage() {
         setProcessing(true);
         setLogs([]);
         addLog("Mulai proses import...", "info");
-        addLog("Memuat Master SKU...", "info");
 
         try {
             // 1. Master SKU
-            const varMap = {};
-            const vSnap = await getDocs(collection(db, "product_variants"));
-            vSnap.forEach(d => { const v=d.data(); if(v.sku) varMap[v.sku.toUpperCase().trim()] = {id:d.id, ...v}; });
+            const varMap = await getMasterVariants();
 
             const reader = new FileReader();
             reader.onload = async (ev) => {
@@ -65,8 +98,10 @@ export default function ImportSalesPage() {
                     }
                 });
 
-                const batch = writeBatch(db);
+                // 3. Process Batch
+                let batch = writeBatch(db);
                 let count = 0;
+                let opCount = 0;
 
                 for(const [id, data] of Object.entries(orders)) {
                     const head = data.raw;
@@ -75,7 +110,10 @@ export default function ImportSalesPage() {
                     // Detect Status
                     const kStatus = ks.find(k => k.match(/status/i));
                     const statusRaw = head[kStatus]?.toLowerCase() || 'completed';
-                    if(statusRaw.includes('cancel')) { addLog(`SKIP ${id}: Cancelled`, "warning"); continue; }
+                    if(statusRaw.includes('cancel') || statusRaw.includes('batal')) { 
+                        addLog(`SKIP ${id}: Status Cancelled/Batal`, "warning"); 
+                        continue; 
+                    }
 
                     // Detect Amounts
                     const kNet = ks.find(k => k.match(/settlement|penyelesaian|net/i));
@@ -88,17 +126,19 @@ export default function ImportSalesPage() {
                     const sEx = await getDocs(qEx);
                     
                     if(!sEx.empty) {
-                        // Update Status Only
                         const exDoc = sEx.docs[0];
+                        // Hanya update jika status berubah dari proses -> selesai
                         if(exDoc.data().status !== statusRaw) {
                             batch.update(doc(db, "sales_orders", exDoc.id), { status: statusRaw, updated_at: serverTimestamp() });
+                            opCount++;
                             addLog(`UPDATE ${id}: Status -> ${statusRaw}`, "info");
                         }
                     } else {
-                        // Create New
+                        // Create New Order
                         const poRef = doc(collection(db, "sales_orders"));
                         const kDate = ks.find(k => k.match(/date|tanggal/i));
                         
+                        // A. Header Sales Order (1 Op)
                         batch.set(poRef, {
                             order_number: id, 
                             marketplace_ref: id,
@@ -109,12 +149,14 @@ export default function ImportSalesPage() {
                             payment_status: statusRaw === 'completed' ? 'paid' : 'unpaid',
                             gross_amount: grossAmount,
                             net_amount: netAmount || grossAmount,
+                            payment_account_id: config.account_id,
                             created_at: serverTimestamp(),
                             created_by: user?.email
                         });
+                        opCount++;
 
                         // Items
-                        data.items.forEach(item => {
+                        for (const item of data.items) {
                             const kSku = Object.keys(item).find(k => k.match(/sku/i));
                             const kQty = Object.keys(item).find(k => k.match(/qty|jumlah/i));
                             const sku = String(item[kSku]).toUpperCase().trim();
@@ -122,32 +164,70 @@ export default function ImportSalesPage() {
                             
                             const v = varMap[sku];
                             if(v) {
+                                // B. Sales Item (1 Op)
                                 batch.set(doc(collection(db, `sales_orders/${poRef.id}/items`)), {
                                     variant_id: v.id, sku: v.sku, qty: qty, unit_price: 0, unit_cost: v.cost
                                 });
+                                opCount++;
+
+                                // C. Stock Movement (1 Op)
                                 batch.set(doc(collection(db, "stock_movements")), {
                                     variant_id: v.id, warehouse_id: config.warehouse_id, type: 'sale_out',
                                     qty: -qty, ref_id: poRef.id, ref_type: 'sales_order',
                                     date: serverTimestamp(), notes: `Import ${id}`
                                 });
+                                opCount++;
+
+                                // D. Update Snapshot (1 Op) - FIX PENTING!
+                                const snapRef = doc(db, "stock_snapshots", `${v.id}_${config.warehouse_id}`);
+                                batch.set(snapRef, {
+                                    id: `${v.id}_${config.warehouse_id}`,
+                                    variant_id: v.id,
+                                    warehouse_id: config.warehouse_id,
+                                    qty: increment(-qty) // Mengurangi stok
+                                }, { merge: true });
+                                opCount++;
                             }
-                        });
+                        };
 
                         // Auto Journal Cash if Completed
                         if(statusRaw === 'completed') {
+                            const totalIn = netAmount || grossAmount;
+                            
+                            // E. Cash Transaction (1 Op)
                             const cashRef = doc(collection(db, "cash_transactions"));
                             batch.set(cashRef, {
-                                type: 'in', amount: netAmount || grossAmount, date: serverTimestamp(),
+                                type: 'in', amount: totalIn, date: serverTimestamp(),
                                 category: 'penjualan', account_id: config.account_id,
                                 description: `Settlement ${id}`, ref_type: 'sales_order', ref_id: poRef.id
                             });
+                            opCount++;
+
+                            // F. Update Account Balance (1 Op) - FIX PENTING!
+                            const accRef = doc(db, "cash_accounts", config.account_id);
+                            batch.update(accRef, {
+                                balance: increment(totalIn)
+                            });
+                            opCount++;
                         }
+
                         count++;
                         addLog(`NEW ${id}: Created`, "success");
                     }
+
+                    // Chunking Batch
+                    if (opCount >= 450) {
+                        await batch.commit();
+                        batch = writeBatch(db);
+                        opCount = 0;
+                        addLog("...Menyimpan batch data...", "warning");
+                    }
                 }
 
-                await batch.commit();
+                // Commit sisa
+                if (opCount > 0) await batch.commit();
+                
+                invalidateCaches();
                 addLog(`SELESAI! Proses ${count} order baru.`, "success");
                 setProcessing(false);
             };

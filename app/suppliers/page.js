@@ -1,9 +1,12 @@
-// app/suppliers/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_suppliers_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function SuppliersPage() {
     const [suppliers, setSuppliers] = useState([]);
@@ -11,16 +14,50 @@ export default function SuppliersPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        fetchData(); 
+    }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
         try {
-            const q = query(collection(db, "suppliers"), orderBy("name", "asc"));
+            // 1. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { data, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setSuppliers(data);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Fetch Firebase
+            const q = query(
+                collection(db, "suppliers"), 
+                orderBy("name", "asc"),
+                limit(100) // Safety limit
+            );
+            
             const snap = await getDocs(q);
             const data = [];
             snap.forEach(d => data.push({id: d.id, ...d.data()}));
+            
             setSuppliers(data);
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+
+            // 3. Simpan Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                data: data,
+                timestamp: Date.now()
+            }));
+
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const openModal = (sup = null) => {
@@ -38,14 +75,30 @@ export default function SuppliersPage() {
                 notes: formData.notes,
                 updated_at: serverTimestamp()
             };
-            if (formData.id) await updateDoc(doc(db, "suppliers", formData.id), payload);
-            else { payload.created_at = serverTimestamp(); await addDoc(collection(db, "suppliers"), payload); }
-            setModalOpen(false); fetchData();
+            
+            if (formData.id) {
+                await updateDoc(doc(db, "suppliers", formData.id), payload);
+            } else { 
+                payload.created_at = serverTimestamp(); 
+                await addDoc(collection(db, "suppliers"), payload); 
+            }
+            
+            // Reset Cache
+            sessionStorage.removeItem(CACHE_KEY);
+            
+            setModalOpen(false); 
+            fetchData(true);
         } catch (e) { alert("Gagal: " + e.message); }
     };
 
     const deleteItem = async (id) => {
-        if(confirm("Hapus supplier ini?")) { await deleteDoc(doc(db, "suppliers", id)); fetchData(); }
+        if(confirm("Hapus supplier ini?")) { 
+            await deleteDoc(doc(db, "suppliers", id)); 
+            
+            // Reset Cache
+            sessionStorage.removeItem(CACHE_KEY);
+            fetchData(true); 
+        }
     };
 
     return (

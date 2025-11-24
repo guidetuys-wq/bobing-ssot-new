@@ -1,10 +1,13 @@
-// app/sales-manual/page.js
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, doc, runTransaction, addDoc, serverTimestamp, query, orderBy, where, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, runTransaction, addDoc, serverTimestamp, query, orderBy, where, limit, increment } from 'firebase/firestore';
 import { formatRupiah, sortBySize } from '@/lib/utils';
 import { Portal } from '@/lib/usePortal';
+
+// Konfigurasi Cache
+const CACHE_POS_MASTER = 'lumina_pos_master_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function PosPage() {
     const [products, setProducts] = useState([]);
@@ -27,74 +30,222 @@ export default function PosPage() {
 
     const searchInputRef = useRef(null);
 
+    // Helper: Invalidate Cache Lain
+    const invalidateOtherCaches = () => {
+        sessionStorage.removeItem('lumina_inventory_data');
+        sessionStorage.removeItem('lumina_balance_data');
+        sessionStorage.removeItem('lumina_cash_accounts');
+        sessionStorage.removeItem('lumina_cash_transactions');
+        sessionStorage.removeItem('lumina_purchases_history');
+        // POS Master cache sendiri tidak perlu dihapus karena data master (produk/cust) tidak berubah saat transaksi
+    };
+
     useEffect(() => {
         const init = async () => {
             try {
-                const [whS, prodS, varS, custS, snapS, accS] = await Promise.all([
-                    getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
-                    getDocs(collection(db, "products")),
-                    getDocs(query(collection(db, "product_variants"), orderBy("sku"))),
-                    getDocs(query(collection(db, "customers"), orderBy("name"))),
-                    getDocs(collection(db, "stock_snapshots")),
-                    getDocs(query(collection(db, "chart_of_accounts"), orderBy("code")))
-                ]);
-                const wh = []; whS.forEach(d => wh.push({id:d.id, ...d.data()})); setWarehouses(wh);
-                if(wh.length > 0) setSelectedWh(wh.find(w=>w.type!=='virtual_supplier')?.id || wh[0].id);
-                const cust = []; custS.forEach(d => cust.push({id:d.id, ...d.data()})); setCustomers(cust);
-                const acc = []; accS.forEach(d => { const c = d.data().category.toLowerCase(); if(c.includes('kas') || c.includes('bank')) acc.push({id:d.id, ...d.data()}); }); setAccounts(acc);
-                const defAcc = acc.find(a => a.code === '1101' || a.code === '1201'); if(defAcc) setPaymentAccId(defAcc.id);
-                const snaps = {}; snapS.forEach(d => snaps[d.id] = d.data().qty || 0); setSnapshots(snaps);
-                const vars = []; varS.forEach(d => vars.push({id:d.id, ...d.data()}));
-                const prods = []; prodS.forEach(d => { const p = d.data(); const pVars = vars.filter(v => v.product_id === d.id); prods.push({ id: d.id, ...p, variants: pVars }); });
-                setProducts(prods);
+                let masterData = null;
+
+                // 1. Cek Cache Master Data
+                const cached = sessionStorage.getItem(CACHE_POS_MASTER);
+                if (cached) {
+                    const { data, ts } = JSON.parse(cached);
+                    if (Date.now() - ts < CACHE_DURATION) {
+                        masterData = data;
+                        console.log("POS Master loaded from cache.");
+                    }
+                }
+
+                // 2. Fetch jika belum ada cache
+                if (!masterData) {
+                    console.log("Fetching POS Master...");
+                    const [whS, prodS, varS, custS, accS] = await Promise.all([
+                        getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
+                        getDocs(collection(db, "products")), // Fetch all products (Client-side search requires full list or smart search)
+                        getDocs(query(collection(db, "product_variants"), orderBy("sku"))),
+                        getDocs(query(collection(db, "customers"), orderBy("name"))),
+                        getDocs(query(collection(db, "chart_of_accounts"), orderBy("code")))
+                    ]);
+
+                    const wh = []; whS.forEach(d => wh.push({id:d.id, ...d.data()}));
+                    const cust = []; custS.forEach(d => cust.push({id:d.id, ...d.data()}));
+                    
+                    const acc = []; 
+                    accS.forEach(d => { 
+                        const c = d.data().category.toLowerCase(); 
+                        if(c.includes('kas') || c.includes('bank')) acc.push({id:d.id, ...d.data()}); 
+                    });
+
+                    const vars = []; varS.forEach(d => vars.push({id:d.id, ...d.data()}));
+                    const prods = []; 
+                    prodS.forEach(d => { 
+                        const p = d.data(); 
+                        const pVars = vars.filter(v => v.product_id === d.id); 
+                        prods.push({ id: d.id, ...p, variants: pVars }); 
+                    });
+
+                    masterData = { wh, cust, acc, prods };
+                    
+                    // Simpan Cache
+                    sessionStorage.setItem(CACHE_POS_MASTER, JSON.stringify({ data: masterData, ts: Date.now() }));
+                }
+
+                // 3. Set State dari Master Data
+                setWarehouses(masterData.wh);
+                setCustomers(masterData.cust);
+                setAccounts(masterData.acc);
+                setProducts(masterData.prods);
+
+                // Set Defaults
+                if(masterData.wh.length > 0) setSelectedWh(masterData.wh.find(w=>w.type!=='virtual_supplier')?.id || masterData.wh[0].id);
+                const defAcc = masterData.acc.find(a => a.code === '1101' || a.code === '1201'); 
+                if(defAcc) setPaymentAccId(defAcc.id);
+
+                // 4. ALWAYS Fetch Stock Snapshots Fresh (Real-time) - Jangan di-cache!
+                const snapS = await getDocs(collection(db, "stock_snapshots"));
+                const snaps = {}; 
+                snapS.forEach(d => snaps[d.id] = d.data().qty || 0); 
+                setSnapshots(snaps);
+
             } catch(e) { console.error(e); } finally { setLoading(false); }
         };
         init();
     }, []);
 
     useEffect(() => {
-        const handleKey = (e) => { if(e.key === 'F2') { e.preventDefault(); searchInputRef.current?.focus(); } if(e.key === 'F9') handleCheckout(); if(e.key === 'F8') setCart([]); };
-        window.addEventListener('keydown', handleKey); return () => window.removeEventListener('keydown', handleKey);
+        const handleKey = (e) => { 
+            if(e.key === 'F2') { e.preventDefault(); searchInputRef.current?.focus(); } 
+            if(e.key === 'F9') handleCheckout(); 
+            if(e.key === 'F8') setCart([]); 
+        };
+        window.addEventListener('keydown', handleKey); 
+        return () => window.removeEventListener('keydown', handleKey);
     }, [cart, paymentAccId, cashReceived]); 
 
     const addToCart = (variant, prodName) => {
-        const key = `${variant.id}_${selectedWh}`; const max = snapshots[key] || 0;
+        const key = `${variant.id}_${selectedWh}`; 
+        const max = snapshots[key] || 0;
+        
         if(max <= 0) return alert("Stok Habis!");
+        
         const existIdx = cart.findIndex(i => i.id === variant.id);
-        if(existIdx > -1) { const newCart = [...cart]; if(newCart[existIdx].qty + 1 > max) return alert("Stok Maksimal"); newCart[existIdx].qty += 1; setCart(newCart); }
-        else { setCart([...cart, { id: variant.id, sku: variant.sku, name: prodName, spec: `${variant.color}/${variant.size}`, price: variant.price, cost: variant.cost, qty: 1, max }]); }
-        setModalVariantOpen(false); setSearchTerm('');
+        if(existIdx > -1) { 
+            const newCart = [...cart]; 
+            if(newCart[existIdx].qty + 1 > max) return alert("Stok Maksimal"); 
+            newCart[existIdx].qty += 1; 
+            setCart(newCart); 
+        } else { 
+            setCart([...cart, { 
+                id: variant.id, sku: variant.sku, name: prodName, spec: `${variant.color}/${variant.size}`, 
+                price: variant.price, cost: variant.cost, qty: 1, max 
+            }]); 
+        }
+        setModalVariantOpen(false); 
+        setSearchTerm('');
     };
 
     const handleSearchEnter = (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); const k = searchTerm.trim().toUpperCase(); if(!k) return; let fV=null, fP=null; for(const p of products) { const v = p.variants.find(x => x.sku===k || x.barcode===k); if(v) { fV=v; fP=p; break; } } if(fV) addToCart(fV, fP.name); }
+        if (e.key === 'Enter') { 
+            e.preventDefault(); 
+            const k = searchTerm.trim().toUpperCase(); 
+            if(!k) return; 
+            
+            let fV=null, fP=null; 
+            for(const p of products) { 
+                const v = p.variants.find(x => x.sku===k || x.barcode===k); 
+                if(v) { fV=v; fP=p; break; } 
+            } 
+            if(fV) addToCart(fV, fP.name); 
+        }
     };
 
     const handleCheckout = async () => {
         if(cart.length === 0) return alert("Kosong");
-        const total = cart.reduce((a,b) => a + (b.price * b.qty), 0); const received = parseInt(cashReceived) || 0;
-        if(!confirm("Proses?")) return;
+        const total = cart.reduce((a,b) => a + (b.price * b.qty), 0); 
+        const received = parseInt(cashReceived) || 0;
+        
+        if(!confirm("Proses Transaksi?")) return;
+        
         try {
             const orderId = `ORD-${Date.now()}`;
             const custName = selectedCustId ? customers.find(c => c.id === selectedCustId).name : 'Guest';
+            
             await runTransaction(db, async (t) => {
+                // 1. Create Sales Order
                 const soRef = doc(collection(db, "sales_orders"));
-                t.set(soRef, { order_number: orderId, warehouse_id: selectedWh, source: 'pos', customer_id: selectedCustId || null, customer_name: custName, order_date: serverTimestamp(), status: 'completed', payment_status: 'paid', gross_amount: total, net_amount: total, payment_account_id: paymentAccId, items_summary: cart.map(c => `${c.sku}(${c.qty})`).join(', '), created_by: auth.currentUser?.email });
+                t.set(soRef, { 
+                    order_number: orderId, warehouse_id: selectedWh, source: 'pos', 
+                    customer_id: selectedCustId || null, customer_name: custName, 
+                    order_date: serverTimestamp(), status: 'completed', payment_status: 'paid', 
+                    gross_amount: total, net_amount: total, payment_account_id: paymentAccId, 
+                    items_summary: cart.map(c => `${c.sku}(${c.qty})`).join(', '), 
+                    created_by: user?.email 
+                });
+                
                 for(const i of cart) {
-                    t.set(doc(collection(db, `sales_orders/${soRef.id}/items`)), { variant_id: i.id, sku: i.sku, qty: i.qty, unit_price: i.price, unit_cost: i.cost });
-                    t.set(doc(collection(db, "stock_movements")), { variant_id: i.id, warehouse_id: selectedWh, type: 'sale_out', qty: -i.qty, ref_id: soRef.id, ref_type: 'sales_order', date: serverTimestamp() });
-                    const sRef = doc(db, "stock_snapshots", `${i.id}_${selectedWh}`); const sDoc = await t.get(sRef); if(sDoc.exists()) t.update(sRef, { qty: sDoc.data().qty - i.qty });
+                    // 2. Create Items
+                    t.set(doc(collection(db, `sales_orders/${soRef.id}/items`)), { 
+                        variant_id: i.id, sku: i.sku, qty: i.qty, unit_price: i.price, unit_cost: i.cost 
+                    });
+                    
+                    // 3. Create Movement
+                    t.set(doc(collection(db, "stock_movements")), { 
+                        variant_id: i.id, warehouse_id: selectedWh, type: 'sale_out', 
+                        qty: -i.qty, ref_id: soRef.id, ref_type: 'sales_order', date: serverTimestamp() 
+                    });
+                    
+                    // 4. Update Snapshot (Decrement)
+                    const sRef = doc(db, "stock_snapshots", `${i.id}_${selectedWh}`); 
+                    const sDoc = await t.get(sRef); 
+                    if(sDoc.exists()) {
+                        const newQty = sDoc.data().qty - i.qty;
+                        if (newQty < 0) throw new Error(`Stok ${i.sku} tidak cukup! Sisa: ${sDoc.data().qty}`);
+                        t.update(sRef, { qty: newQty });
+                    } else {
+                        throw new Error(`Data stok ${i.sku} tidak ditemukan!`);
+                    }
                 }
-                t.set(doc(collection(db, "cash_transactions")), { type: 'in', amount: total, date: serverTimestamp(), category: 'penjualan', account_id: paymentAccId, description: `POS ${orderId}`, ref_type: 'sales_order', ref_id: soRef.id });
-                const accRef = doc(db, "cash_accounts", paymentAccId); const accDoc = await t.get(accRef); if(accDoc.exists()) t.update(accRef, { balance: (accDoc.data().balance || 0) + total });
+                
+                // 5. Create Cash Transaction
+                t.set(doc(collection(db, "cash_transactions")), { 
+                    type: 'in', amount: total, date: serverTimestamp(), 
+                    category: 'penjualan', account_id: paymentAccId, 
+                    description: `POS ${orderId}`, ref_type: 'sales_order', ref_id: soRef.id 
+                });
+                
+                // 6. Update Account Balance
+                const accRef = doc(db, "cash_accounts", paymentAccId); 
+                const accDoc = await t.get(accRef); 
+                if(accDoc.exists()) t.update(accRef, { balance: (accDoc.data().balance || 0) + total });
             });
-            setInvoiceData({ id: orderId, total, received, change: received - total, items: cart, date: new Date(), customer: custName }); setModalInvoiceOpen(true); setCart([]); setCashReceived('');
-        } catch(e) { alert(e.message); }
+
+            // Success Actions
+            invalidateOtherCaches(); // Update data di halaman lain
+            
+            // Update Local Snapshot State (Optimistic UI Update)
+            const newSnaps = { ...snapshots };
+            cart.forEach(i => {
+                const key = `${i.id}_${selectedWh}`;
+                if (newSnaps[key]) newSnaps[key] -= i.qty;
+            });
+            setSnapshots(newSnaps);
+
+            setInvoiceData({ id: orderId, total, received, change: received - total, items: cart, date: new Date(), customer: custName }); 
+            setModalInvoiceOpen(true); 
+            setCart([]); 
+            setCashReceived('');
+
+        } catch(e) { 
+            alert("Gagal: " + e.message); 
+        }
     };
 
     const handlePrint = () => { window.print(); };
 
-    const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.base_sku?.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 24);
+    const filteredProducts = products.filter(p => 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        p.base_sku?.toLowerCase().includes(searchTerm.toLowerCase())
+    ).slice(0, 24); // Limit display result for performance
+
     const cartTotal = cart.reduce((a,b) => a + (b.price * b.qty), 0);
     const change = (parseInt(cashReceived) || 0) - cartTotal;
 

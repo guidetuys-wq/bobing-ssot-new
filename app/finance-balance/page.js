@@ -5,33 +5,92 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { formatRupiah } from '@/lib/utils';
 
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_balance_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
+
 export default function BalanceSheetPage() {
     const [assets, setAssets] = useState({ cash: 0, inventory: 0, receivable: 0, listCash: [] });
     const [liabilities, setLiabilities] = useState({ payable: 0 });
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => { calculate(); }, []);
+    useEffect(() => { 
+        calculate(); 
+    }, []);
 
-    const calculate = async () => {
+    const calculate = async (forceRefresh = false) => {
         setLoading(true);
         try {
+            // 1. Cek Cache (Hemat Reads & CPU)
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { assets: cAssets, liabilities: cLiabilities, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setAssets(cAssets);
+                        setLiabilities(cLiabilities);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Fetch Data Real-time (Jika cache expired / force refresh)
+            // Note: Tidak menggunakan limit() agar Kalkulasi Neraca AKURAT
+            
+            // A. Cash (Kas & Bank)
             const snapCash = await getDocs(collection(db, "cash_accounts"));
-            let totalCash = 0; const listCash = [];
-            snapCash.forEach(doc => { const d = doc.data(); totalCash += (d.balance || 0); listCash.push({ name: d.name, val: d.balance || 0 }); });
+            let totalCash = 0; 
+            const listCash = [];
+            snapCash.forEach(doc => { 
+                const d = doc.data(); 
+                totalCash += (d.balance || 0); 
+                listCash.push({ name: d.name, val: d.balance || 0 }); 
+            });
 
-            const [snapSnap, snapVar] = await Promise.all([getDocs(collection(db, "stock_snapshots")), getDocs(collection(db, "product_variants"))]);
-            const costMap = {}; snapVar.forEach(d => costMap[d.id] = d.data().cost || 0);
-            let totalInv = 0; snapSnap.forEach(doc => { const d = doc.data(); if(d.qty > 0) totalInv += (d.qty * (costMap[d.variant_id] || 0)); });
+            // B. Inventory (HPP Aset) - Parallel Fetch
+            const [snapSnap, snapVar] = await Promise.all([
+                getDocs(collection(db, "stock_snapshots")), 
+                getDocs(collection(db, "product_variants"))
+            ]);
+            
+            const costMap = {}; 
+            snapVar.forEach(d => costMap[d.id] = d.data().cost || 0);
+            
+            let totalInv = 0; 
+            snapSnap.forEach(doc => { 
+                const d = doc.data(); 
+                if(d.qty > 0) totalInv += (d.qty * (costMap[d.variant_id] || 0)); 
+            });
 
+            // C. Receivables (Piutang - Sales Unpaid)
             const snapPiutang = await getDocs(query(collection(db, "sales_orders"), where("payment_status", "==", "unpaid")));
-            let totalPiutang = 0; snapPiutang.forEach(d => totalPiutang += (d.data().net_amount || 0));
+            let totalPiutang = 0; 
+            snapPiutang.forEach(d => totalPiutang += (d.data().net_amount || 0));
 
+            // D. Payables (Hutang - Purchase Unpaid)
             const snapHutang = await getDocs(query(collection(db, "purchase_orders"), where("payment_status", "==", "unpaid")));
-            let totalHutang = 0; snapHutang.forEach(d => totalHutang += (d.data().total_amount || 0));
+            let totalHutang = 0; 
+            snapHutang.forEach(d => totalHutang += (d.data().total_amount || 0));
 
-            setAssets({ cash: totalCash, inventory: totalInv, receivable: totalPiutang, listCash });
-            setLiabilities({ payable: totalHutang });
-        } catch(e) { console.error(e); } finally { setLoading(false); }
+            const newAssets = { cash: totalCash, inventory: totalInv, receivable: totalPiutang, listCash };
+            const newLiabilities = { payable: totalHutang };
+
+            setAssets(newAssets);
+            setLiabilities(newLiabilities);
+
+            // 3. Simpan Hasil Kalkulasi ke Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                assets: newAssets,
+                liabilities: newLiabilities,
+                timestamp: Date.now()
+            }));
+
+        } catch(e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const totalAssets = assets.cash + assets.inventory + assets.receivable;
@@ -44,7 +103,9 @@ export default function BalanceSheetPage() {
                     <h2 className="text-2xl font-display font-bold text-lumina-text tracking-tight">Balance Sheet</h2>
                     <p className="text-sm text-lumina-muted mt-1 font-light">Real-time financial position snapshot.</p>
                 </div>
-                <button onClick={calculate} className="btn-ghost-dark text-xs">Refresh Data</button>
+                <button onClick={() => calculate(true)} className="btn-ghost-dark text-xs">
+                    Refresh Data
+                </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -57,7 +118,7 @@ export default function BalanceSheetPage() {
                         <div>
                             <p className="text-xs font-bold text-lumina-muted uppercase mb-2 tracking-wide">Cash & Bank</p>
                             <div className="space-y-2 pl-3 border-l-2 border-lumina-border">
-                                {assets.listCash.map((c, i) => (
+                                {loading ? <span className="text-xs text-lumina-muted">Calculating...</span> : assets.listCash.map((c, i) => (
                                     <div key={i} className="flex justify-between text-sm">
                                         <span className="text-lumina-text opacity-80">{c.name}</span>
                                         <span className="font-mono font-medium text-lumina-text">{formatRupiah(c.val)}</span>
@@ -65,27 +126,28 @@ export default function BalanceSheetPage() {
                                 ))}
                             </div>
                             <div className="flex justify-between items-center mt-3 pt-3 border-t border-dashed border-lumina-border font-bold text-lumina-text">
-                                <span>Total Cash</span><span className="text-emerald-400">{formatRupiah(assets.cash)}</span>
+                                <span>Total Cash</span>
+                                <span className="text-emerald-400">{loading ? '...' : formatRupiah(assets.cash)}</span>
                             </div>
                         </div>
                         <div>
                             <p className="text-xs font-bold text-lumina-muted uppercase mb-2 tracking-wide">Inventory</p>
                             <div className="flex justify-between items-center pl-3 border-l-2 border-blue-500/30">
                                 <span className="text-sm text-lumina-text opacity-80">Stock Value (At Cost)</span>
-                                <span className="font-bold text-blue-400 font-mono">{formatRupiah(assets.inventory)}</span>
+                                <span className="font-bold text-blue-400 font-mono">{loading ? '...' : formatRupiah(assets.inventory)}</span>
                             </div>
                         </div>
                         <div>
                             <p className="text-xs font-bold text-lumina-muted uppercase mb-2 tracking-wide">Receivables</p>
                             <div className="flex justify-between items-center pl-3 border-l-2 border-amber-500/30">
                                 <span className="text-sm text-lumina-text opacity-80">Unpaid Sales</span>
-                                <span className="font-bold text-amber-400 font-mono">{formatRupiah(assets.receivable)}</span>
+                                <span className="font-bold text-amber-400 font-mono">{loading ? '...' : formatRupiah(assets.receivable)}</span>
                             </div>
                         </div>
                     </div>
                     <div className="px-6 py-4 bg-lumina-surface border-t border-lumina-border flex justify-between items-center">
                         <span className="font-bold text-lumina-text">TOTAL ASSETS</span>
-                        <span className="font-extrabold text-emerald-500 text-xl font-mono">{formatRupiah(totalAssets)}</span>
+                        <span className="font-extrabold text-emerald-500 text-xl font-mono">{loading ? '...' : formatRupiah(totalAssets)}</span>
                     </div>
                 </div>
 
@@ -98,12 +160,12 @@ export default function BalanceSheetPage() {
                         <div className="p-6">
                             <div className="flex justify-between items-center pl-3 border-l-2 border-rose-500/30">
                                 <span className="text-sm text-lumina-text opacity-80">Accounts Payable (PO)</span>
-                                <span className="font-bold text-rose-400 font-mono">{formatRupiah(liabilities.payable)}</span>
+                                <span className="font-bold text-rose-400 font-mono">{loading ? '...' : formatRupiah(liabilities.payable)}</span>
                             </div>
                         </div>
                         <div className="px-6 py-4 bg-lumina-surface border-t border-lumina-border flex justify-between items-center">
                             <span className="font-bold text-lumina-text">TOTAL LIABILITIES</span>
-                            <span className="font-bold text-rose-500 text-lg font-mono">{formatRupiah(liabilities.payable)}</span>
+                            <span className="font-bold text-rose-500 text-lg font-mono">{loading ? '...' : formatRupiah(liabilities.payable)}</span>
                         </div>
                     </div>
 
@@ -112,7 +174,7 @@ export default function BalanceSheetPage() {
                         <div className="relative z-10">
                             <p className="text-xs text-lumina-muted uppercase tracking-widest mb-2 font-bold">Owners Equity</p>
                             <h3 className={`text-3xl font-display font-extrabold tracking-tight ${equity >= 0 ? 'text-white' : 'text-rose-400'}`}>
-                                {formatRupiah(equity)}
+                                {loading ? '...' : formatRupiah(equity)}
                             </h3>
                             <p className="text-[10px] text-lumina-muted mt-2 opacity-70">Assets - Liabilities</p>
                         </div>

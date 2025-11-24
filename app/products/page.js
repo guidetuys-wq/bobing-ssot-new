@@ -1,55 +1,108 @@
-// app/products/page.js
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { db, storage } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, where, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { sortBySize, formatRupiah } from '@/lib/utils';
 import imageCompression from 'browser-image-compression';
 import { Portal } from '@/lib/usePortal';
 
-export default function ProductsPage() {
-    // ... (Kode ini SAMA PERSIS dengan kode ProductsPage terakhir yang saya berikan di respons sebelumnya yang sudah ada accordion dan modal centered) ...
-    // Agar tidak memotong, saya paste ulang kode lengkapnya di sini untuk memastikan:
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_products_page_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
+export default function ProductsPage() {
     const [products, setProducts] = useState([]);
     const [brands, setBrands] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
+    
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
     const [imageFile, setImageFile] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [previewUrl, setPreviewUrl] = useState(null);
     const fileInputRef = useRef(null);
+    
     const [expandedProductId, setExpandedProductId] = useState(null);
     const [variantsCache, setVariantsCache] = useState({});
     const [loadingVariants, setLoadingVariants] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        fetchData(); 
+    }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
         try {
+            // 1. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { brands, categories, products, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setBrands(brands);
+                        setCategories(categories);
+                        setProducts(products);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Fetch Firebase
             const [snapBrands, snapCats, snapProds] = await Promise.all([
                 getDocs(query(collection(db, "brands"), orderBy("name", "asc"))),
                 getDocs(query(collection(db, "categories"), orderBy("name", "asc"))),
-                getDocs(collection(db, "products"))
+                getDocs(query(collection(db, "products"), limit(100))) // Safety Limit
             ]);
-            const bs = []; snapBrands.forEach(d => bs.push({id:d.id, ...d.data()})); setBrands(bs);
-            const cs = []; snapCats.forEach(d => cs.push({id:d.id, ...d.data()})); setCategories(cs);
-            const ps = []; snapProds.forEach(d => { const p=d.data(); const b=bs.find(x=>x.id===p.brand_id); ps.push({id:d.id, ...p, brand_name:b?b.name:''}); });
-            setProducts(ps.sort((a,b)=>(a.base_sku||'').localeCompare(b.base_sku||'')));
-        } catch(e){console.error(e)} finally{setLoading(false)}
+
+            const bs = []; 
+            snapBrands.forEach(d => bs.push({id:d.id, ...d.data()}));
+            
+            const cs = []; 
+            snapCats.forEach(d => cs.push({id:d.id, ...d.data()}));
+            
+            const ps = []; 
+            snapProds.forEach(d => { 
+                const p=d.data(); 
+                const b=bs.find(x=>x.id===p.brand_id); 
+                ps.push({id:d.id, ...p, brand_name:b?b.name:''}); 
+            });
+            
+            const sortedProducts = ps.sort((a,b)=>(a.base_sku||'').localeCompare(b.base_sku||''));
+
+            setBrands(bs);
+            setCategories(cs);
+            setProducts(sortedProducts);
+
+            // 3. Simpan Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                brands: bs,
+                categories: cs,
+                products: sortedProducts,
+                timestamp: Date.now()
+            }));
+
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const toggleVariants = async (id) => {
         if(expandedProductId===id) { setExpandedProductId(null); return; }
         setExpandedProductId(id);
+        
+        // Cache variants di state (InMemory) saja cukup untuk detail drill-down
         if(!variantsCache[id]) {
             setLoadingVariants(true);
             const q = query(collection(db, "product_variants"), where("product_id", "==", id));
-            const s = await getDocs(q); const v=[]; s.forEach(d=>v.push({id:d.id, ...d.data()}));
+            const s = await getDocs(q); 
+            const v=[]; 
+            s.forEach(d=>v.push({id:d.id, ...d.data()}));
             setVariantsCache(prev=>({...prev, [id]:v}));
             setLoadingVariants(false);
         }
@@ -72,7 +125,8 @@ export default function ProductsPage() {
     };
 
     const handleSubmit = async (e) => {
-        e.preventDefault(); setUploading(true);
+        e.preventDefault(); 
+        setUploading(true);
         try {
             let url = formData.image_url;
             if(imageFile) {
@@ -81,12 +135,33 @@ export default function ProductsPage() {
                 await uploadBytes(sRef, blob); url = await getDownloadURL(sRef);
             }
             const pl = {...formData, image_url: url||'', updated_at: serverTimestamp()};
-            if(formData.id) await updateDoc(doc(db,"products",formData.id), pl); else { pl.created_at=serverTimestamp(); await addDoc(collection(db,"products"), pl); }
-            setModalOpen(false); fetchData(); alert("Disimpan!");
-        } catch(e){alert(e.message)} finally{setUploading(false)}
+            
+            if(formData.id) {
+                await updateDoc(doc(db,"products",formData.id), pl); 
+            } else { 
+                pl.created_at=serverTimestamp(); 
+                await addDoc(collection(db,"products"), pl); 
+            }
+            
+            // Reset Cache & Refresh
+            sessionStorage.removeItem(CACHE_KEY);
+            setModalOpen(false); 
+            fetchData(true); 
+            alert("Disimpan!");
+        } catch(e) {
+            alert(e.message);
+        } finally {
+            setUploading(false);
+        }
     };
 
-    const deleteProduct = async (id) => { if(confirm("Hapus?")) { await deleteDoc(doc(db,"products",id)); fetchData(); } };
+    const deleteProduct = async (id) => { 
+        if(confirm("Hapus?")) { 
+            await deleteDoc(doc(db,"products",id)); 
+            sessionStorage.removeItem(CACHE_KEY);
+            fetchData(true); 
+        } 
+    };
     
     const filtered = products.filter(p=>p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.base_sku.toLowerCase().includes(searchTerm.toLowerCase()));
 

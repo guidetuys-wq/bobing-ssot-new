@@ -1,4 +1,3 @@
-// app/settings/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
@@ -25,22 +24,43 @@ export default function SettingsPage() {
         autoPrint: true
     });
 
-    // Load Settings (Simulasi - nanti bisa dihubungkan ke collection 'settings')
+    // Load Settings dari Firebase
     useEffect(() => {
-        // Disini nanti fetch data dari db.collection('settings').doc('general')
+        const fetchSettings = async () => {
+            try {
+                const docRef = doc(db, "settings", "general");
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if(data.storeProfile) setStoreProfile(data.storeProfile);
+                    if(data.posConfig) setPosConfig(data.posConfig);
+                }
+            } catch (e) {
+                console.error("Gagal memuat pengaturan:", e);
+            }
+        };
+        fetchSettings();
     }, []);
 
     const handleSave = async () => {
         setLoading(true);
         try {
-            // Simulasi Save
-            // await setDoc(doc(db, "settings", "general"), { storeProfile, posConfig, updated_at: serverTimestamp() });
-            setTimeout(() => {
-                alert("Pengaturan berhasil disimpan!");
-                setLoading(false);
-            }, 1000);
+            // Simpan ke Firestore (Merge true agar tidak menimpa field lain jika ada)
+            await setDoc(doc(db, "settings", "general"), { 
+                storeProfile, 
+                posConfig, 
+                updated_at: serverTimestamp(),
+                updated_by: user?.email
+            }, { merge: true });
+
+            // Update Cache Lokal (Optional: jika ingin data settings tersedia instan di halaman lain)
+            localStorage.setItem('lumina_settings', JSON.stringify({ storeProfile, posConfig }));
+
+            alert("Pengaturan berhasil disimpan!");
         } catch (e) {
             alert("Gagal menyimpan: " + e.message);
+        } finally {
             setLoading(false);
         }
     };

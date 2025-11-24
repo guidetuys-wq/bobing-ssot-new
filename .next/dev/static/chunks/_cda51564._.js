@@ -78,10 +78,17 @@ var _s = __turbopack_context__.k.signature();
 ;
 ;
 __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Chart"].register(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["CategoryScale"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["LinearScale"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["PointElement"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["LineElement"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["BarElement"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Title"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Tooltip"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["Legend"], __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__["ArcElement"]);
+// --- KONFIGURASI CACHE ---
+const CACHE_MASTER_KEY = 'lumina_dash_master'; // Untuk Produk, Stok, Akun (Berat)
+const CACHE_SALES_PREFIX = 'lumina_dash_sales_'; // Untuk Transaksi (Dynamic)
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 function Dashboard() {
     _s();
     const [loading, setLoading] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(true);
     const [filterRange, setFilterRange] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])('this_month');
+    // Data States
+    const [masterData, setMasterData] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(null); // Disimpan di state agar tidak fetch ulang saat ganti tanggal
+    // UI States
     const [kpi, setKpi] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])({
         gross: 0,
         net: 0,
@@ -96,169 +103,113 @@ function Dashboard() {
     const [topProducts, setTopProducts] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
     const [lowStockItems, setLowStockItems] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
     const [recentSales, setRecentSales] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])([]);
+    // 1. Fetch Master Data (Hanya sekali atau ambil dari cache)
+    const fetchMasterData = async ()=>{
+        // Cek Cache Browser
+        const cached = sessionStorage.getItem(CACHE_MASTER_KEY);
+        if (cached) {
+            const { data, ts } = JSON.parse(cached);
+            if (Date.now() - ts < CACHE_DURATION) return data;
+        }
+        // Fetch Firebase (Parallel)
+        const [snapCash, snapStock, snapVar, snapProd] = await Promise.all([
+            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "cash_accounts")),
+            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "stock_snapshots")),
+            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants")),
+            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "products"))
+        ]);
+        // Process Data untuk disimpan (Serialize)
+        const cashBalance = snapCash.docs.reduce((acc, doc)=>acc + (doc.data().balance || 0), 0);
+        const products = [];
+        snapProd.forEach((d)=>products.push({
+                id: d.id,
+                name: d.data().name
+            }));
+        const variants = [];
+        snapVar.forEach((d)=>variants.push({
+                id: d.id,
+                ...d.data()
+            }));
+        const stocks = [];
+        snapStock.forEach((d)=>stocks.push({
+                ...d.data()
+            })); // data() sudah include variant_id & qty
+        const result = {
+            cashBalance,
+            products,
+            variants,
+            stocks
+        };
+        // Simpan Cache
+        sessionStorage.setItem(CACHE_MASTER_KEY, JSON.stringify({
+            data: result,
+            ts: Date.now()
+        }));
+        return result;
+    };
+    // 2. Fetch Sales Data (Berdasarkan Range)
+    const fetchSalesData = async (range)=>{
+        const cacheKey = `${CACHE_SALES_PREFIX}${range}`;
+        // Cek Cache
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+            const { data, ts } = JSON.parse(cached);
+            if (Date.now() - ts < CACHE_DURATION) {
+                // Convert string date kembali ke object date untuk processing
+                return data.map((d)=>({
+                        ...d,
+                        order_date: new Date(d.order_date) // Fix date serialization
+                    }));
+            }
+        }
+        // Tentukan Query Date
+        const now = new Date();
+        let start = new Date();
+        let end = new Date();
+        end.setHours(23, 59, 59, 999);
+        if (range === 'today') start.setHours(0, 0, 0, 0);
+        else if (range === 'this_month') start = new Date(now.getFullYear(), now.getMonth(), 1);
+        else if (range === 'last_month') {
+            start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            end = new Date(now.getFullYear(), now.getMonth(), 0);
+            end.setHours(23, 59, 59, 999);
+        }
+        // Fetch Firebase
+        const q = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["query"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "sales_orders"), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["where"])("order_date", ">=", start), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["where"])("order_date", "<=", end), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["orderBy"])("order_date", "asc"));
+        const snap = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])(q);
+        const sales = [];
+        snap.forEach((d)=>{
+            const data = d.data();
+            sales.push({
+                id: d.id,
+                ...data,
+                order_date: data.order_date.toDate() // Convert Timestamp ke JS Date
+            });
+        });
+        // Simpan Cache (Date di-convert ke string otomatis oleh JSON.stringify)
+        sessionStorage.setItem(cacheKey, JSON.stringify({
+            data: sales,
+            ts: Date.now()
+        }));
+        return sales;
+    };
+    // 3. Main Orchestrator
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "Dashboard.useEffect": ()=>{
             const loadDashboard = {
                 "Dashboard.useEffect.loadDashboard": async ()=>{
                     setLoading(true);
                     try {
-                        const now = new Date();
-                        let start = new Date();
-                        let end = new Date();
-                        end.setHours(23, 59, 59, 999);
-                        if (filterRange === 'today') start.setHours(0, 0, 0, 0);
-                        else if (filterRange === 'this_month') start = new Date(now.getFullYear(), now.getMonth(), 1);
-                        else if (filterRange === 'last_month') {
-                            start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                            end = new Date(now.getFullYear(), now.getMonth(), 0);
-                            end.setHours(23, 59, 59, 999);
+                        // A. Load Master Data (jika belum ada di state)
+                        let currentMaster = masterData;
+                        if (!currentMaster) {
+                            currentMaster = await fetchMasterData();
+                            setMasterData(currentMaster);
                         }
-                        const [snapSales, snapCashAcc, snapStock, snapVar, snapProd] = await Promise.all([
-                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["query"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "sales_orders"), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["where"])("order_date", ">=", start), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["where"])("order_date", "<=", end), (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["orderBy"])("order_date", "asc"))),
-                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "cash_accounts")),
-                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "stock_snapshots")),
-                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "product_variants")),
-                            (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["getDocs"])((0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$firebase$2f$firestore$2f$dist$2f$index$2e$esm2017$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["collection"])(__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$firebase$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["db"], "products"))
-                        ]);
-                        let totalGross = 0, totalNet = 0, totalCost = 0;
-                        const days = {};
-                        const channels = {};
-                        const prodStats = {};
-                        const recentList = [];
-                        snapSales.forEach({
-                            "Dashboard.useEffect.loadDashboard": (doc)=>{
-                                const d = doc.data();
-                                totalGross += d.gross_amount || 0;
-                                totalNet += d.net_amount || 0;
-                                totalCost += d.total_cost || 0;
-                                const dateStr = new Date(d.order_date.toDate()).toLocaleDateString('id-ID', {
-                                    day: 'numeric',
-                                    month: 'short'
-                                });
-                                if (!days[dateStr]) days[dateStr] = {
-                                    gross: 0,
-                                    profit: 0
-                                };
-                                days[dateStr].gross += d.gross_amount || 0;
-                                days[dateStr].profit += (d.net_amount || 0) - (d.total_cost || 0);
-                                const ch = (d.channel_id || 'manual').toUpperCase();
-                                channels[ch] = (channels[ch] || 0) + (d.gross_amount || 0);
-                                if (d.items_summary) {
-                                    const parts = d.items_summary.split(', ');
-                                    parts.forEach({
-                                        "Dashboard.useEffect.loadDashboard": (p)=>{
-                                            const match = p.match(/(.*)\((\d+)\)/);
-                                            if (match) prodStats[match[1]] = (prodStats[match[1]] || 0) + parseInt(match[2]);
-                                        }
-                                    }["Dashboard.useEffect.loadDashboard"]);
-                                }
-                                recentList.push({
-                                    id: d.order_number,
-                                    customer: d.customer_name,
-                                    amount: d.gross_amount,
-                                    status: d.payment_status,
-                                    time: d.order_date.toDate()
-                                });
-                            }
-                        }["Dashboard.useEffect.loadDashboard"]);
-                        let totalCash = 0;
-                        snapCashAcc.forEach({
-                            "Dashboard.useEffect.loadDashboard": (d)=>totalCash += d.data().balance || 0
-                        }["Dashboard.useEffect.loadDashboard"]);
-                        let totalInvValue = 0;
-                        const lowStocks = [];
-                        const varMap = {};
-                        snapVar.forEach({
-                            "Dashboard.useEffect.loadDashboard": (d)=>{
-                                varMap[d.id] = {
-                                    ...d.data(),
-                                    id: d.id
-                                };
-                            }
-                        }["Dashboard.useEffect.loadDashboard"]);
-                        const prodMap = {};
-                        snapProd.forEach({
-                            "Dashboard.useEffect.loadDashboard": (d)=>prodMap[d.id] = d.data().name
-                        }["Dashboard.useEffect.loadDashboard"]);
-                        const stockAgg = {};
-                        snapStock.forEach({
-                            "Dashboard.useEffect.loadDashboard": (d)=>{
-                                const s = d.data();
-                                if (s.qty > 0) stockAgg[s.variant_id] = (stockAgg[s.variant_id] || 0) + s.qty;
-                            }
-                        }["Dashboard.useEffect.loadDashboard"]);
-                        Object.keys(varMap).forEach({
-                            "Dashboard.useEffect.loadDashboard": (vid)=>{
-                                const v = varMap[vid];
-                                const qty = stockAgg[vid] || 0;
-                                totalInvValue += qty * (v.cost || 0);
-                                if (qty <= (v.min_stock || 5)) lowStocks.push({
-                                    id: vid,
-                                    sku: v.sku,
-                                    name: prodMap[v.product_id] || 'Unknown',
-                                    qty: qty,
-                                    min: v.min_stock || 5
-                                });
-                            }
-                        }["Dashboard.useEffect.loadDashboard"]);
-                        const profit = totalNet - totalCost;
-                        const margin = totalGross > 0 ? profit / totalGross * 100 : 0;
-                        setKpi({
-                            gross: totalGross,
-                            net: totalNet,
-                            profit: profit,
-                            margin: margin.toFixed(1),
-                            txCount: snapSales.size,
-                            cash: totalCash,
-                            inventoryAsset: totalInvValue
-                        });
-                        setChartTrendData({
-                            labels: Object.keys(days),
-                            datasets: [
-                                {
-                                    label: 'Omzet',
-                                    data: Object.values(days).map({
-                                        "Dashboard.useEffect.loadDashboard": (x)=>x.gross
-                                    }["Dashboard.useEffect.loadDashboard"]),
-                                    borderColor: '#D4AF37',
-                                    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-                                    fill: true,
-                                    tension: 0.4
-                                },
-                                {
-                                    label: 'Profit',
-                                    data: Object.values(days).map({
-                                        "Dashboard.useEffect.loadDashboard": (x)=>x.profit
-                                    }["Dashboard.useEffect.loadDashboard"]),
-                                    borderColor: '#10B981',
-                                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                                    fill: true,
-                                    tension: 0.4
-                                }
-                            ]
-                        });
-                        setChartChannelData({
-                            labels: Object.keys(channels),
-                            datasets: [
-                                {
-                                    data: Object.values(channels),
-                                    backgroundColor: [
-                                        '#D4AF37',
-                                        '#10B981',
-                                        '#3B82F6',
-                                        '#8B5CF6'
-                                    ],
-                                    borderWidth: 0
-                                }
-                            ]
-                        });
-                        setTopProducts(Object.entries(prodStats).sort({
-                            "Dashboard.useEffect.loadDashboard": (a, b)=>b[1] - a[1]
-                        }["Dashboard.useEffect.loadDashboard"]).slice(0, 5));
-                        setLowStockItems(lowStocks.sort({
-                            "Dashboard.useEffect.loadDashboard": (a, b)=>a.qty - b.qty
-                        }["Dashboard.useEffect.loadDashboard"]).slice(0, 5));
-                        setRecentSales(recentList.reverse().slice(0, 5));
+                        // B. Load Sales Data (sesuai filter)
+                        const sales = await fetchSalesData(filterRange);
+                        // C. Calculate Logic
+                        processDashboard(sales, currentMaster);
                     } catch (e) {
                         console.error(e);
                     } finally{
@@ -270,7 +221,125 @@ function Dashboard() {
         }
     }["Dashboard.useEffect"], [
         filterRange
-    ]);
+    ]); // Dependency: hanya jalan ulang jika filterRange berubah
+    // 4. Calculation Logic (Pure Function style)
+    const processDashboard = (sales, master)=>{
+        // --- SALES METRICS ---
+        let totalGross = 0, totalNet = 0, totalCost = 0;
+        const days = {};
+        const channels = {};
+        const prodStats = {};
+        const recentList = [];
+        sales.forEach((d)=>{
+            totalGross += d.gross_amount || 0;
+            totalNet += d.net_amount || 0;
+            totalCost += d.total_cost || 0;
+            const dateStr = new Date(d.order_date).toLocaleDateString('id-ID', {
+                day: 'numeric',
+                month: 'short'
+            });
+            if (!days[dateStr]) days[dateStr] = {
+                gross: 0,
+                profit: 0
+            };
+            days[dateStr].gross += d.gross_amount || 0;
+            days[dateStr].profit += (d.net_amount || 0) - (d.total_cost || 0);
+            const ch = (d.channel_id || 'manual').toUpperCase();
+            channels[ch] = (channels[ch] || 0) + (d.gross_amount || 0);
+            if (d.items_summary) {
+                const parts = d.items_summary.split(', ');
+                parts.forEach((p)=>{
+                    const match = p.match(/(.*)\((\d+)\)/);
+                    if (match) prodStats[match[1]] = (prodStats[match[1]] || 0) + parseInt(match[2]);
+                });
+            }
+            recentList.push({
+                id: d.order_number,
+                customer: d.customer_name,
+                amount: d.gross_amount,
+                status: d.payment_status,
+                time: d.order_date
+            });
+        });
+        // --- INVENTORY METRICS ---
+        let totalInvValue = 0;
+        const lowStocks = [];
+        // Mapping helper
+        const varMap = {};
+        master.variants.forEach((v)=>varMap[v.id] = v);
+        const prodMap = {};
+        master.products.forEach((p)=>prodMap[p.id] = p.name);
+        const stockAgg = {};
+        master.stocks.forEach((s)=>{
+            if (s.qty > 0) stockAgg[s.variant_id] = (stockAgg[s.variant_id] || 0) + s.qty;
+        });
+        // Calculate Inventory Value & Low Stock
+        Object.keys(varMap).forEach((vid)=>{
+            const v = varMap[vid];
+            const qty = stockAgg[vid] || 0;
+            totalInvValue += qty * (v.cost || 0);
+            if (qty <= (v.min_stock || 5)) {
+                lowStocks.push({
+                    id: vid,
+                    sku: v.sku,
+                    name: prodMap[v.product_id] || 'Unknown',
+                    qty: qty,
+                    min: v.min_stock || 5
+                });
+            }
+        });
+        const profit = totalNet - totalCost;
+        const margin = totalGross > 0 ? profit / totalGross * 100 : 0;
+        // SET STATES
+        setKpi({
+            gross: totalGross,
+            net: totalNet,
+            profit: profit,
+            margin: margin.toFixed(1),
+            txCount: sales.length,
+            cash: master.cashBalance,
+            inventoryAsset: totalInvValue
+        });
+        setChartTrendData({
+            labels: Object.keys(days),
+            datasets: [
+                {
+                    label: 'Omzet',
+                    data: Object.values(days).map((x)=>x.gross),
+                    borderColor: '#D4AF37',
+                    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Profit',
+                    data: Object.values(days).map((x)=>x.profit),
+                    borderColor: '#10B981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }
+            ]
+        });
+        setChartChannelData({
+            labels: Object.keys(channels),
+            datasets: [
+                {
+                    data: Object.values(channels),
+                    backgroundColor: [
+                        '#D4AF37',
+                        '#10B981',
+                        '#3B82F6',
+                        '#8B5CF6'
+                    ],
+                    borderWidth: 0
+                }
+            ]
+        });
+        setTopProducts(Object.entries(prodStats).sort((a, b)=>b[1] - a[1]).slice(0, 5));
+        setLowStockItems(lowStocks.sort((a, b)=>a.qty - b.qty).slice(0, 5));
+        setRecentSales(recentList.reverse().slice(0, 5));
+    };
     // --- SUB COMPONENTS (DARK MODE) ---
     const KpiCard = ({ title, value, sub, icon, color, loading })=>/*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
             className: "card-luxury p-6 relative overflow-hidden group hover:border-lumina-gold/30 transition-all",
@@ -285,7 +354,7 @@ function Dashboard() {
                                     children: title
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 129,
+                                    lineNumber: 261,
                                     columnNumber: 21
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("h3", {
@@ -294,12 +363,12 @@ function Dashboard() {
                                         className: "h-8 w-32 bg-lumina-highlight rounded animate-pulse"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/page.js",
-                                        lineNumber: 131,
+                                        lineNumber: 263,
                                         columnNumber: 36
                                     }, this) : value
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 130,
+                                    lineNumber: 262,
                                     columnNumber: 21
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -307,13 +376,13 @@ function Dashboard() {
                                     children: sub
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 133,
+                                    lineNumber: 265,
                                     columnNumber: 21
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/dashboard/page.js",
-                            lineNumber: 128,
+                            lineNumber: 260,
                             columnNumber: 17
                         }, this),
                         /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -321,26 +390,26 @@ function Dashboard() {
                             children: icon
                         }, void 0, false, {
                             fileName: "[project]/app/dashboard/page.js",
-                            lineNumber: 135,
+                            lineNumber: 267,
                             columnNumber: 17
                         }, this)
                     ]
                 }, void 0, true, {
                     fileName: "[project]/app/dashboard/page.js",
-                    lineNumber: 127,
+                    lineNumber: 259,
                     columnNumber: 13
                 }, this),
                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                     className: "absolute -bottom-6 -right-6 w-32 h-32 bg-gradient-to-br from-lumina-gold/10 to-transparent rounded-full blur-2xl group-hover:bg-lumina-gold/20 transition-all duration-500"
                 }, void 0, false, {
                     fileName: "[project]/app/dashboard/page.js",
-                    lineNumber: 139,
+                    lineNumber: 271,
                     columnNumber: 13
                 }, this)
             ]
         }, void 0, true, {
             fileName: "[project]/app/dashboard/page.js",
-            lineNumber: 126,
+            lineNumber: 258,
             columnNumber: 9
         }, this);
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -356,7 +425,7 @@ function Dashboard() {
                                 children: "Executive Dashboard"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 148,
+                                lineNumber: 280,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -364,13 +433,13 @@ function Dashboard() {
                                 children: "Real-time business intelligence & analytics."
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 149,
+                                lineNumber: 281,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 147,
+                        lineNumber: 279,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -386,7 +455,7 @@ function Dashboard() {
                                     children: "Hari Ini"
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 153,
+                                    lineNumber: 285,
                                     columnNumber: 25
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -395,7 +464,7 @@ function Dashboard() {
                                     children: "Bulan Ini"
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 154,
+                                    lineNumber: 286,
                                     columnNumber: 25
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("option", {
@@ -404,24 +473,24 @@ function Dashboard() {
                                     children: "Bulan Lalu"
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 155,
+                                    lineNumber: 287,
                                     columnNumber: 25
                                 }, this)
                             ]
                         }, void 0, true, {
                             fileName: "[project]/app/dashboard/page.js",
-                            lineNumber: 152,
+                            lineNumber: 284,
                             columnNumber: 21
                         }, this)
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 151,
+                        lineNumber: 283,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/page.js",
-                lineNumber: 146,
+                lineNumber: 278,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -444,18 +513,18 @@ function Dashboard() {
                                 d: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 162,
+                                lineNumber: 294,
                                 columnNumber: 214
                             }, void 0)
                         }, void 0, false, {
                             fileName: "[project]/app/dashboard/page.js",
-                            lineNumber: 162,
+                            lineNumber: 294,
                             columnNumber: 135
                         }, void 0),
                         loading: loading
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 162,
+                        lineNumber: 294,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(KpiCard, {
@@ -475,18 +544,18 @@ function Dashboard() {
                                 d: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 163,
+                                lineNumber: 295,
                                 columnNumber: 209
                             }, void 0)
                         }, void 0, false, {
                             fileName: "[project]/app/dashboard/page.js",
-                            lineNumber: 163,
+                            lineNumber: 295,
                             columnNumber: 130
                         }, void 0),
                         loading: loading
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 163,
+                        lineNumber: 295,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(KpiCard, {
@@ -506,18 +575,18 @@ function Dashboard() {
                                 d: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 164,
+                                lineNumber: 296,
                                 columnNumber: 193
                             }, void 0)
                         }, void 0, false, {
                             fileName: "[project]/app/dashboard/page.js",
-                            lineNumber: 164,
+                            lineNumber: 296,
                             columnNumber: 114
                         }, void 0),
                         loading: loading
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 164,
+                        lineNumber: 296,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(KpiCard, {
@@ -537,24 +606,24 @@ function Dashboard() {
                                 d: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 165,
+                                lineNumber: 297,
                                 columnNumber: 215
                             }, void 0)
                         }, void 0, false, {
                             fileName: "[project]/app/dashboard/page.js",
-                            lineNumber: 165,
+                            lineNumber: 297,
                             columnNumber: 136
                         }, void 0),
                         loading: loading
                     }, void 0, false, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 165,
+                        lineNumber: 297,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/page.js",
-                lineNumber: 161,
+                lineNumber: 293,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -568,7 +637,7 @@ function Dashboard() {
                                 children: "Performance Trend"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 171,
+                                lineNumber: 303,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -606,25 +675,25 @@ function Dashboard() {
                                     }
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 173,
+                                    lineNumber: 305,
                                     columnNumber: 43
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "h-full flex items-center justify-center text-lumina-muted",
                                     children: "Loading Chart..."
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 173,
+                                    lineNumber: 305,
                                     columnNumber: 328
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 172,
+                                lineNumber: 304,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 170,
+                        lineNumber: 302,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -635,7 +704,7 @@ function Dashboard() {
                                 children: "Channel Mix"
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 177,
+                                lineNumber: 309,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -657,31 +726,31 @@ function Dashboard() {
                                     }
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 179,
+                                    lineNumber: 311,
                                     columnNumber: 46
                                 }, this) : /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                     className: "text-lumina-muted",
                                     children: "Loading Data..."
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 179,
+                                    lineNumber: 311,
                                     columnNumber: 234
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 178,
+                                lineNumber: 310,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 176,
+                        lineNumber: 308,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/page.js",
-                lineNumber: 169,
+                lineNumber: 301,
                 columnNumber: 13
             }, this),
             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -697,12 +766,12 @@ function Dashboard() {
                                     children: "🔥 Top Products"
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 189,
+                                    lineNumber: 321,
                                     columnNumber: 25
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 188,
+                                lineNumber: 320,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("table", {
@@ -716,7 +785,7 @@ function Dashboard() {
                                                     children: sku
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/dashboard/page.js",
-                                                    lineNumber: 195,
+                                                    lineNumber: 327,
                                                     columnNumber: 37
                                                 }, this),
                                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("td", {
@@ -724,29 +793,29 @@ function Dashboard() {
                                                     children: qty
                                                 }, void 0, false, {
                                                     fileName: "[project]/app/dashboard/page.js",
-                                                    lineNumber: 196,
+                                                    lineNumber: 328,
                                                     columnNumber: 37
                                                 }, this)
                                             ]
                                         }, i, true, {
                                             fileName: "[project]/app/dashboard/page.js",
-                                            lineNumber: 194,
+                                            lineNumber: 326,
                                             columnNumber: 33
                                         }, this))
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 192,
+                                    lineNumber: 324,
                                     columnNumber: 25
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 191,
+                                lineNumber: 323,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 187,
+                        lineNumber: 319,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -760,7 +829,7 @@ function Dashboard() {
                                         children: "⚠️ Low Stock"
                                     }, void 0, false, {
                                         fileName: "[project]/app/dashboard/page.js",
-                                        lineNumber: 206,
+                                        lineNumber: 338,
                                         columnNumber: 25
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -771,13 +840,13 @@ function Dashboard() {
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/app/dashboard/page.js",
-                                        lineNumber: 207,
+                                        lineNumber: 339,
                                         columnNumber: 25
                                     }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 205,
+                                lineNumber: 337,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -792,7 +861,7 @@ function Dashboard() {
                                                         children: item.sku
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/dashboard/page.js",
-                                                        lineNumber: 213,
+                                                        lineNumber: 345,
                                                         columnNumber: 37
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -800,13 +869,13 @@ function Dashboard() {
                                                         children: item.name
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/dashboard/page.js",
-                                                        lineNumber: 214,
+                                                        lineNumber: 346,
                                                         columnNumber: 37
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/dashboard/page.js",
-                                                lineNumber: 212,
+                                                lineNumber: 344,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -817,7 +886,7 @@ function Dashboard() {
                                                         children: item.qty
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/dashboard/page.js",
-                                                        lineNumber: 217,
+                                                        lineNumber: 349,
                                                         columnNumber: 37
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -828,30 +897,30 @@ function Dashboard() {
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/dashboard/page.js",
-                                                        lineNumber: 218,
+                                                        lineNumber: 350,
                                                         columnNumber: 37
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/dashboard/page.js",
-                                                lineNumber: 216,
+                                                lineNumber: 348,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, i, true, {
                                         fileName: "[project]/app/dashboard/page.js",
-                                        lineNumber: 211,
+                                        lineNumber: 343,
                                         columnNumber: 29
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 209,
+                                lineNumber: 341,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 204,
+                        lineNumber: 336,
                         columnNumber: 17
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -864,12 +933,12 @@ function Dashboard() {
                                     children: "⚡ Recent Sales"
                                 }, void 0, false, {
                                     fileName: "[project]/app/dashboard/page.js",
-                                    lineNumber: 228,
+                                    lineNumber: 360,
                                     columnNumber: 25
                                 }, this)
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 227,
+                                lineNumber: 359,
                                 columnNumber: 21
                             }, this),
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -887,7 +956,7 @@ function Dashboard() {
                                                                 children: s.customer
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/dashboard/page.js",
-                                                                lineNumber: 235,
+                                                                lineNumber: 367,
                                                                 columnNumber: 41
                                                             }, this),
                                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -895,13 +964,13 @@ function Dashboard() {
                                                                 children: s.id
                                                             }, void 0, false, {
                                                                 fileName: "[project]/app/dashboard/page.js",
-                                                                lineNumber: 236,
+                                                                lineNumber: 368,
                                                                 columnNumber: 41
                                                             }, this)
                                                         ]
                                                     }, void 0, true, {
                                                         fileName: "[project]/app/dashboard/page.js",
-                                                        lineNumber: 234,
+                                                        lineNumber: 366,
                                                         columnNumber: 37
                                                     }, this),
                                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
@@ -912,13 +981,13 @@ function Dashboard() {
                                                         })
                                                     }, void 0, false, {
                                                         fileName: "[project]/app/dashboard/page.js",
-                                                        lineNumber: 238,
+                                                        lineNumber: 370,
                                                         columnNumber: 37
                                                     }, this)
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/app/dashboard/page.js",
-                                                lineNumber: 233,
+                                                lineNumber: 365,
                                                 columnNumber: 33
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -926,40 +995,40 @@ function Dashboard() {
                                                 children: (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$utils$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["formatRupiah"])(s.amount)
                                             }, void 0, false, {
                                                 fileName: "[project]/app/dashboard/page.js",
-                                                lineNumber: 240,
+                                                lineNumber: 372,
                                                 columnNumber: 33
                                             }, this)
                                         ]
                                     }, i, true, {
                                         fileName: "[project]/app/dashboard/page.js",
-                                        lineNumber: 232,
+                                        lineNumber: 364,
                                         columnNumber: 29
                                     }, this))
                             }, void 0, false, {
                                 fileName: "[project]/app/dashboard/page.js",
-                                lineNumber: 230,
+                                lineNumber: 362,
                                 columnNumber: 21
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/app/dashboard/page.js",
-                        lineNumber: 226,
+                        lineNumber: 358,
                         columnNumber: 17
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/app/dashboard/page.js",
-                lineNumber: 185,
+                lineNumber: 317,
                 columnNumber: 13
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/app/dashboard/page.js",
-        lineNumber: 144,
+        lineNumber: 276,
         columnNumber: 9
     }, this);
 }
-_s(Dashboard, "LZZmi7RVSAS4GxJmkEdYRbqmyTg=");
+_s(Dashboard, "ja7Z4kw7pj9RS1oEQHNSrrgkpIM=");
 _c = Dashboard;
 var _c;
 __turbopack_context__.k.register(_c, "Dashboard");

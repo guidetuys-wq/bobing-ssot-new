@@ -1,9 +1,12 @@
-// app/warehouses/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, limit } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
+
+// Konfigurasi Cache
+const CACHE_KEY = 'lumina_warehouses_data';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 Menit
 
 export default function WarehousesPage() {
     const [warehouses, setWarehouses] = useState([]);
@@ -12,21 +15,54 @@ export default function WarehousesPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => { 
+        fetchData(); 
+    }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (forceRefresh = false) => {
+        setLoading(true);
         try {
+            // 1. Cek Cache
+            if (!forceRefresh) {
+                const cached = sessionStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    const { warehouses: cWh, suppliers: cSupp, timestamp } = JSON.parse(cached);
+                    if (Date.now() - timestamp < CACHE_DURATION) {
+                        setWarehouses(cWh);
+                        setSuppliers(cSupp);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+
+            // 2. Fetch Firebase
             const [snapSupp, snapWh] = await Promise.all([
-                getDocs(query(collection(db, "suppliers"), orderBy("name"))),
-                getDocs(query(collection(db, "warehouses"), orderBy("created_at")))
+                getDocs(query(collection(db, "suppliers"), orderBy("name"), limit(100))),
+                getDocs(query(collection(db, "warehouses"), orderBy("created_at"), limit(50)))
             ]);
             
-            const suppData = []; snapSupp.forEach(d => suppData.push({id: d.id, ...d.data()}));
-            setSuppliers(suppData);
+            const suppData = []; 
+            snapSupp.forEach(d => suppData.push({id: d.id, ...d.data()}));
+            
+            const whData = []; 
+            snapWh.forEach(d => whData.push({id: d.id, ...d.data()}));
 
-            const whData = []; snapWh.forEach(d => whData.push({id: d.id, ...d.data()}));
+            setSuppliers(suppData);
             setWarehouses(whData);
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+
+            // 3. Simpan Cache
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                warehouses: whData,
+                suppliers: suppData,
+                timestamp: Date.now()
+            }));
+
+        } catch (e) { 
+            console.error(e); 
+        } finally { 
+            setLoading(false); 
+        }
     };
 
     const openModal = (wh = null) => {
@@ -44,14 +80,37 @@ export default function WarehousesPage() {
                 supplier_id: formData.type === 'virtual_supplier' ? formData.supplier_id : null,
                 updated_at: serverTimestamp()
             };
-            if (formData.id) await updateDoc(doc(db, "warehouses", formData.id), payload);
-            else { payload.created_at = serverTimestamp(); await addDoc(collection(db, "warehouses"), payload); }
-            setModalOpen(false); fetchData();
+            
+            if (formData.id) {
+                await updateDoc(doc(db, "warehouses", formData.id), payload);
+            } else { 
+                payload.created_at = serverTimestamp(); 
+                await addDoc(collection(db, "warehouses"), payload); 
+            }
+            
+            // Reset Cache
+            sessionStorage.removeItem(CACHE_KEY);
+            // Juga reset cache halaman lain yang menggunakan data gudang
+            sessionStorage.removeItem('lumina_inventory_data');
+            sessionStorage.removeItem('lumina_pos_master_data');
+            sessionStorage.removeItem('lumina_purchases_master');
+
+            setModalOpen(false); 
+            fetchData(true);
+
         } catch (err) { alert(err.message); }
     };
 
     const deleteWh = async (id) => {
-        if(confirm("Hapus gudang?")) { await deleteDoc(doc(db, "warehouses", id)); fetchData(); }
+        if(confirm("Hapus gudang?")) { 
+            await deleteDoc(doc(db, "warehouses", id)); 
+            
+            // Reset Cache
+            sessionStorage.removeItem(CACHE_KEY);
+            sessionStorage.removeItem('lumina_inventory_data');
+            
+            fetchData(true); 
+        }
     };
 
     return (
