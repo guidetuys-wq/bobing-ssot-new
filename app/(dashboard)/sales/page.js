@@ -9,5 +9,5 @@ import { redirect } from 'next/navigation';
  */
 export default function SalesRootPage() {
   // Mengarahkan ke sub-rute penjualan utama
-  redirect('/sales/manual');
+  redirect('/sales/transactions');
 }

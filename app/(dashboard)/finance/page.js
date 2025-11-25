@@ -1,33 +1,51 @@
+// app/(dashboard)/finance/page.js
 "use client";
+import React from 'react';
 import TabsLayout from '@/components/TabsLayout';
-import { ProfitLossIcon, BalanceSheetIcon, CashFlowIcon, ChartOfAccountsIcon } from '@/components/DashboardIcons';
-import CashFlowPage from '../cash/page';
-import ReportPLPage from '../finance-reports/page';
-import BalanceSheetPage from '../finance-balance/page';
-import FinanceAccountsPage from '../finance-accounts/page';
+// Ikon yang dibutuhkan (Ikon ini sudah benar dari DashboardIcons.jsx)
+import { ProfitLossIcon, BalanceSheetIcon, CashFlowIcon, ChartOfAccountsIcon } from '@/components/DashboardIcons'; 
 
+// PERBAIKAN IMPORT JALUR: Menggunakan path relatif ke sub-folder BARU (yang sudah kita pindahkan)
+import CashFlowPage from './cash/page';              
+import ReportPLPage from './reports/page';          
+import BalanceSheetPage from './balance/page';      
+import FinanceAccountsPage from './accounts/page';    
+
+// PERBAIKAN KONFLIK NAMA: Hanya ada satu default export
 export default function FinanceCenter() {
   const tabs = [
-    { id: 'dashboard', label: <span className="flex items-center gap-2"><ProfitLossIcon /> Laba Rugi</span> },
-    { id: 'balance', label: <span className="flex items-center gap-2"><BalanceSheetIcon /> Neraca</span> },
-    { id: 'cash', label: <span className="flex items-center gap-2"><CashFlowIcon /> Arus Kas</span> },
-    { id: 'accounts', label: <span className="flex items-center gap-2"><ChartOfAccountsIcon  /> Chart of Accounts</span> },
+    {
+      label: 'Accounts',
+      path: '/finance/accounts',
+      component: FinanceAccountsPage,
+      icon: <ChartOfAccountsIcon /> 
+    },
+    {
+      label: 'Balance Sheet',
+      path: '/finance/balance',
+      component: BalanceSheetPage,
+      icon: <BalanceSheetIcon />
+    },
+    {
+      label: 'Cash Flow',
+      path: '/finance/cash',
+      component: CashFlowPage,
+      icon: <CashFlowIcon />
+    },
+    {
+      label: 'Reports',
+      path: '/finance/reports',
+      component: ReportPLPage,
+      icon: <ProfitLossIcon />
+    },
   ];
 
   return (
     <TabsLayout 
-      title="Finance Control" 
-      subtitle="Pusat kendali keuangan, akuntansi, dan laporan."
-      tabs={tabs}
-    >
-      {(activeTab) => (
-        <>
-          {activeTab === 'dashboard' && <ReportPLPage />}
-          {activeTab === 'balance' && <BalanceSheetPage />}
-          {activeTab === 'cash' && <CashFlowPage />}
-          {activeTab === 'accounts' && <FinanceAccountsPage />}
-        </>
-      )}
-    </TabsLayout>
+      tabs={tabs} 
+      defaultPath='/finance/accounts' 
+      pageTitle="Finance Center"
+      pageSubtitle="Pusat Ringkasan dan Laporan Keuangan"
+    />
   );
 }
