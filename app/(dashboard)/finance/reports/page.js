@@ -1,3 +1,4 @@
+// app/(dashboard)/finance/reports/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
@@ -36,16 +37,74 @@ export default function ReportPLPage() {
             const start = new Date(range.start); start.setHours(0,0,0,0);
             const end = new Date(range.end); end.setHours(23,59,59,999);
 
-            const salesSnapshot = await getAggregateFromServer(query(collection(db, "sales_orders"), where("order_date", ">=", start), where("order_date", "<=", end)), { totalRevenue: sum('net_amount'), totalCogs: sum('total_cost') });
-            const rev = salesSnapshot.data().totalRevenue || 0;
-            const cogs = salesSnapshot.data().totalCogs || 0;
+            // 1. FETCH MASTER COA (Untuk Validasi Kategori)
+            const accSnap = await getDocs(collection(db, "chart_of_accounts"));
+            const accMap = {}; // Map ID -> Data Akun
+            accSnap.forEach(d => { accMap[d.id] = d.data(); });
 
+            // 2. REVENUE & COGS (Dari Sales Order - Accrual Basis)
+            // Kita menggunakan data Sales Order karena HPP per barang tercatat akurat di sana.
+            const salesSnapshot = await getAggregateFromServer(
+                query(collection(db, "sales_orders"), where("order_date", ">=", start), where("order_date", "<=", end)), 
+                { totalRevenue: sum('net_amount'), totalCogs: sum('total_hpp') } // Gunakan total_hpp (atau total_cost sebagai fallback)
+            );
+            
+            // Fallback jika total_hpp 0 (mungkin field lama bernama total_cost)
+            let rev = salesSnapshot.data().totalRevenue || 0;
+            let cogs = salesSnapshot.data().totalCogs || 0;
+            
+            if (cogs === 0) {
+                const salesFallback = await getAggregateFromServer(
+                    query(collection(db, "sales_orders"), where("order_date", ">=", start), where("order_date", "<=", end)), 
+                    { totalCost: sum('total_cost') }
+                );
+                cogs = salesFallback.data().totalCost || 0;
+            }
+
+            // 3. OPERATIONAL EXPENSES (Dari Cash Transactions)
             const snapExp = await getDocs(query(collection(db, "cash_transactions"), where("date", ">=", start), where("date", "<=", end), where("type", "==", "out")));
-            let expTotal = 0; const expDet = {};
-            const exclude = ['pembelian', 'transfer', 'prive']; 
+            
+            let expTotal = 0; 
+            const expDet = {};
+            
             snapExp.forEach(d => {
-                const t = d.data(); const cat = (t.category || 'Lainnya').toLowerCase();
-                if(!exclude.includes(cat)) { expTotal += t.amount; expDet[cat] = (expDet[cat] || 0) + t.amount; }
+                const t = d.data();
+                
+                // LOGIKA DETEKSI BEBAN (EXPENSE)
+                let isExpense = false;
+                let categoryName = t.category || 'Lainnya';
+
+                // A. Cek via Akun COA (Priority)
+                if (t.category_account_id && accMap[t.category_account_id]) {
+                    const acc = accMap[t.category_account_id];
+                    const code = String(acc.code);
+                    
+                    // Akun Kepala 5 adalah Beban
+                    if (code.startsWith('5')) {
+                        // KECUALI 5101 (HPP) karena sudah dihitung dari Sales Order
+                        if (code !== '5101') {
+                            isExpense = true;
+                            categoryName = acc.name; // Pakai nama akun resmi
+                        }
+                    }
+                } 
+                // B. Fallback Logic (Data Lama / Manual String)
+                else {
+                    const catLower = (t.category || '').toLowerCase();
+                    const descLower = (t.description || '').toLowerCase();
+                    
+                    // Exclude Pembelian Stok (Aset), Transfer, Prive, Refund
+                    const excludedKeywords = ['pembelian', 'stok', 'transfer', 'prive', 'refund', 'modal'];
+                    
+                    if (!excludedKeywords.some(k => catLower.includes(k) || descLower.includes(k))) {
+                        isExpense = true;
+                    }
+                }
+
+                if (isExpense) {
+                    expTotal += t.amount;
+                    expDet[categoryName] = (expDet[categoryName] || 0) + t.amount;
+                }
             });
 
             const reportData = { revenue: rev, cogs: cogs, expenses: expTotal, details: expDet };
@@ -67,7 +126,7 @@ export default function ReportPLPage() {
                     <div className="p-2 bg-primary/10 rounded-lg text-primary"><DollarSign className="w-5 h-5"/></div>
                     <div>
                         <h2 className="text-lg font-bold text-text-primary">Profit & Loss</h2>
-                        <p className="text-xs text-text-secondary">Periode Laporan</p>
+                        <p className="text-xs text-text-secondary">Laporan Laba Rugi (SSOT)</p>
                     </div>
                 </div>
                 
@@ -94,7 +153,7 @@ export default function ReportPLPage() {
                     {/* SECTION: REVENUE */}
                     <div className="relative z-10">
                         <h3 className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <TrendingUp className="w-4 h-4 text-emerald-500"/> Revenue
+                            <TrendingUp className="w-4 h-4 text-emerald-500"/> Revenue (Pendapatan)
                         </h3>
                         <div className="flex justify-between items-end border-b border-dashed border-border pb-4">
                             <span className="text-sm font-medium text-text-primary">Net Sales (Penjualan Bersih)</span>
@@ -109,7 +168,7 @@ export default function ReportPLPage() {
                             <span className="font-mono font-medium text-rose-500">({formatRupiah(data.cogs)})</span>
                         </div>
                         <div className="bg-blue-50/50 p-4 rounded-xl flex justify-between items-center border border-blue-100">
-                            <span className="font-bold text-blue-800 text-sm uppercase tracking-wide">Gross Profit</span>
+                            <span className="font-bold text-blue-800 text-sm uppercase tracking-wide">Gross Profit (Laba Kotor)</span>
                             <span className="font-bold text-xl text-blue-700 font-display">{formatRupiah(gross)}</span>
                         </div>
                     </div>
@@ -117,16 +176,19 @@ export default function ReportPLPage() {
                     {/* SECTION: EXPENSES */}
                     <div className="space-y-3">
                         <h3 className="text-xs font-bold text-text-secondary uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <TrendingDown className="w-4 h-4 text-rose-500"/> Expenses
+                            <TrendingDown className="w-4 h-4 text-rose-500"/> Operating Expenses (Beban)
                         </h3>
                         <div className="pl-4 space-y-2 border-l-2 border-gray-100">
-                            {Object.entries(data.details).map(([k, v]) => (
-                                <div key={k} className="flex justify-between text-sm">
-                                    <span className="capitalize text-text-primary opacity-80">{k}</span>
-                                    <span className="font-mono text-text-secondary">{formatRupiah(v)}</span>
-                                </div>
-                            ))}
-                            {data.expenses === 0 && <p className="text-xs text-text-secondary italic">Tidak ada pengeluaran tercatat.</p>}
+                            {Object.keys(data.details).length === 0 ? (
+                                <p className="text-xs text-text-secondary italic">Tidak ada pengeluaran operasional tercatat.</p>
+                            ) : (
+                                Object.entries(data.details).map(([k, v]) => (
+                                    <div key={k} className="flex justify-between text-sm">
+                                        <span className="capitalize text-text-primary opacity-80">{k}</span>
+                                        <span className="font-mono text-text-secondary">{formatRupiah(v)}</span>
+                                    </div>
+                                ))
+                            )}
                         </div>
                         <div className="flex justify-between items-center pt-2 border-t border-border mt-2">
                             <span className="font-bold text-text-primary text-sm">Total Expenses</span>

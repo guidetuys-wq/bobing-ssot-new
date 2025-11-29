@@ -1,3 +1,4 @@
+// app/(dashboard)/settings/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
@@ -11,7 +12,8 @@ import PageHeader from '@/components/PageHeader';
 import { 
     Store, Receipt, Shield, Settings, Save, RefreshCw, 
     HardDrive, AlertTriangle, Check, Smartphone, MapPin, 
-    Printer, Percent, Lock, User
+    Printer, Percent, Lock, User, Wallet, ShoppingCart, 
+    Briefcase, CreditCard, PieChart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -24,7 +26,7 @@ export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // State Default
+    // --- EXISTING STATES (JANGAN DIHAPUS) ---
     const [storeProfile, setStoreProfile] = useState({
         name: '', address: '', phone: '', footerMsg: ''
     });
@@ -33,18 +35,38 @@ export default function SettingsPage() {
         paperSize: '58mm', enableTax: false, taxRate: 11, autoPrint: true
     });
 
+    // --- NEW: FINANCE CONFIGURATION ---
+    const [financeConfig, setFinanceConfig] = useState({
+        defaultRevenueId: '',    // 4101 - Pendapatan Penjualan (POS)
+        defaultReceivableId: '', // 1201 - Piutang Usaha (Import Sales)
+        defaultInventoryId: '',  // 1301 - Persediaan Barang (Purchase)
+        defaultPayableId: '',    // 2101 - Utang Usaha (Purchase Credit)
+        defaultCOGSId: ''        // 5101 - HPP (Costing)
+    });
+    const [coaList, setCoaList] = useState([]); // List Master Akun
+
     useEffect(() => {
         const fetchSettings = async () => {
             setLoading(true);
-            // 1. Cek Cache
+            
+            // 0. Fetch Master COA (Untuk Dropdown Mapping)
+            try {
+                const accSnap = await getDocs(collection(db, "chart_of_accounts"));
+                // Sort by Code agar rapi (1101, 1102...)
+                const accounts = accSnap.docs.map(d => ({id: d.id, ...d.data()}));
+                setCoaList(accounts.sort((a,b) => (a.code || '').localeCompare(b.code || '')));
+            } catch(e) { console.error("Failed loading COA", e); }
+
+            // 1. Cek Cache Settings
             if (typeof window !== 'undefined') {
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
                     try {
-                        const { storeProfile: cStore, posConfig: cPos, timestamp } = JSON.parse(cached);
+                        const { storeProfile: cStore, posConfig: cPos, financeConfig: cFin, timestamp } = JSON.parse(cached);
                         if (Date.now() - timestamp < CACHE_DURATION) {
                             if(cStore) setStoreProfile(cStore);
                             if(cPos) setPosConfig(cPos);
+                            if(cFin) setFinanceConfig(prev => ({...prev, ...cFin})); // Merge to keep defaults
                             setLoading(false);
                             return;
                         }
@@ -58,12 +80,33 @@ export default function SettingsPage() {
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    setStoreProfile(data.storeProfile || storeProfile);
-                    setPosConfig(data.posConfig || posConfig);
+                    if(data.storeProfile) setStoreProfile(data.storeProfile);
+                    if(data.posConfig) setPosConfig(data.posConfig);
+                    
+                    // Load Config, atau Auto-Detect jika belum ada (Smart Default)
+                    if(data.financeConfig) {
+                        setFinanceConfig(data.financeConfig);
+                    } else if (coaList.length > 0) {
+                        // Auto-detect logic berdasarkan kode COA Anda
+                        const rev = coaList.find(a => a.code === '4101')?.id || '';
+                        const inv = coaList.find(a => a.code === '1301')?.id || '';
+                        const rec = coaList.find(a => a.code === '1201')?.id || '';
+                        const pay = coaList.find(a => a.code === '2101')?.id || '';
+                        const cogs = coaList.find(a => a.code === '5101')?.id || '';
+                        setFinanceConfig({ 
+                            defaultRevenueId: rev, 
+                            defaultInventoryId: inv, 
+                            defaultReceivableId: rec,
+                            defaultPayableId: pay,
+                            defaultCOGSId: cogs
+                        });
+                    }
+                    
                     if (typeof window !== 'undefined') {
                         localStorage.setItem(CACHE_KEY, JSON.stringify({
                             storeProfile: data.storeProfile,
                             posConfig: data.posConfig,
+                            financeConfig: data.financeConfig,
                             timestamp: Date.now()
                         }));
                     }
@@ -79,12 +122,16 @@ export default function SettingsPage() {
         const toastId = toast.loading("Menyimpan pengaturan...");
         try {
             await setDoc(doc(db, "settings", "general"), { 
-                storeProfile, posConfig, updated_at: serverTimestamp(), updated_by: user?.email
+                storeProfile, 
+                posConfig, 
+                financeConfig, // Simpan konfigurasi finance
+                updated_at: serverTimestamp(), 
+                updated_by: user?.email
             }, { merge: true });
 
             if (typeof window !== 'undefined') {
                 localStorage.setItem(CACHE_KEY, JSON.stringify({ 
-                    storeProfile, posConfig, timestamp: Date.now() 
+                    storeProfile, posConfig, financeConfig, timestamp: Date.now() 
                 }));
             }
             toast.success("Berhasil disimpan!", { id: toastId });
@@ -165,6 +212,7 @@ export default function SettingsPage() {
                 <div className="lg:col-span-3 space-y-2">
                     <MenuButton id="store" label="Store Identity" icon={Store} desc="Name, Address, Footer" />
                     <MenuButton id="pos" label="POS Config" icon={Receipt} desc="Printer & Tax Settings" />
+                    <MenuButton id="finance" label="Finance Mapping" icon={Wallet} desc="COA Automation" />
                     <MenuButton id="account" label="Account Security" icon={Shield} desc="Password & Access" />
                     <MenuButton id="system" label="System Data" icon={Settings} desc="Backup & Maintenance" />
                 </div>
@@ -272,7 +320,117 @@ export default function SettingsPage() {
                             </>
                         )}
 
-                        {/* TAB 3: ACCOUNT */}
+                        {/* TAB 3: FINANCE CONFIG (EXPANDED & SAFE) */}
+                        {activeTab === 'finance' && (
+                            <>
+                                <SectionTitle title="Finance Automation" desc="Mapping akun COA agar transaksi sistem (POS/Import) tercatat otomatis." />
+                                <div className="space-y-6 max-w-3xl">
+                                    <div className="p-5 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-800 flex items-start gap-3">
+                                        <div className="p-1 bg-white rounded-full shrink-0"><AlertTriangle className="w-4 h-4 text-blue-500"/></div>
+                                        <div>
+                                            <b>Instruksi:</b> Pilih akun dari Chart of Accounts untuk setiap kategori di bawah. Jika akun belum ada, buat dulu di menu <b>Finance : Accounts</b>.
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        
+                                        {/* GROUP 1: PENJUALAN (SALES) */}
+                                        <div className="p-5 rounded-xl border border-emerald-100 bg-emerald-50/50 space-y-4">
+                                            <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2 mb-2 pb-2 border-b border-emerald-100">
+                                                <Receipt className="w-4 h-4"/> Penjualan & Piutang
+                                            </h4>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-text-secondary uppercase mb-1.5 block">Akun Pendapatan (Revenue)</label>
+                                                <select 
+                                                    className="input-luxury text-xs"
+                                                    value={financeConfig.defaultRevenueId}
+                                                    onChange={e => setFinanceConfig({ ...financeConfig, defaultRevenueId: e.target.value })}
+                                                >
+                                                    <option value="">-- Pilih (4101) --</option>
+                                                    {coaList.filter(a => a.code.startsWith('4')).map(a => (
+                                                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-text-secondary mt-1">POS Sales akan masuk sebagai Kredit ke akun ini.</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-text-secondary uppercase mb-1.5 block">Akun Piutang (Receivable)</label>
+                                                <select 
+                                                    className="input-luxury text-xs"
+                                                    value={financeConfig.defaultReceivableId}
+                                                    onChange={e => setFinanceConfig({ ...financeConfig, defaultReceivableId: e.target.value })}
+                                                >
+                                                    <option value="">-- Pilih (1201) --</option>
+                                                    {coaList.filter(a => a.code.startsWith('1') && a.name.toLowerCase().includes('piutang')).map(a => (
+                                                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-text-secondary mt-1">Import Sales (Marketplace) akan masuk ke sini.</p>
+                                            </div>
+                                        </div>
+
+                                        {/* GROUP 2: PEMBELIAN (PURCHASE) */}
+                                        <div className="p-5 rounded-xl border border-blue-100 bg-blue-50/50 space-y-4">
+                                            <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2 mb-2 pb-2 border-b border-blue-100">
+                                                <ShoppingCart className="w-4 h-4"/> Pembelian & Stok
+                                            </h4>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-text-secondary uppercase mb-1.5 block">Akun Persediaan (Inventory)</label>
+                                                <select 
+                                                    className="input-luxury text-xs"
+                                                    value={financeConfig.defaultInventoryId}
+                                                    onChange={e => setFinanceConfig({ ...financeConfig, defaultInventoryId: e.target.value })}
+                                                >
+                                                    <option value="">-- Pilih (1301) --</option>
+                                                    {coaList.filter(a => a.code.startsWith('1') || a.name.toLowerCase().includes('sediaan')).map(a => (
+                                                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-text-secondary mt-1">Pembelian PO (Tunai) akan mendebit akun ini.</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-text-secondary uppercase mb-1.5 block">Akun Utang Usaha (Payable)</label>
+                                                <select 
+                                                    className="input-luxury text-xs"
+                                                    value={financeConfig.defaultPayableId}
+                                                    onChange={e => setFinanceConfig({ ...financeConfig, defaultPayableId: e.target.value })}
+                                                >
+                                                    <option value="">-- Pilih (2101) --</option>
+                                                    {coaList.filter(a => a.code.startsWith('2')).map(a => (
+                                                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-text-secondary mt-1">Pembelian PO (Kredit) akan dicatat ke sini.</p>
+                                            </div>
+                                        </div>
+
+                                        {/* GROUP 3: COSTING (HPP) */}
+                                        <div className="p-5 rounded-xl border border-amber-100 bg-amber-50/50 space-y-4 md:col-span-2">
+                                            <h4 className="text-sm font-bold text-amber-800 flex items-center gap-2 mb-2 pb-2 border-b border-amber-100">
+                                                <PieChart className="w-4 h-4"/> Costing & Beban
+                                            </h4>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-text-secondary uppercase mb-1.5 block">Akun HPP (Cost of Goods Sold)</label>
+                                                <select 
+                                                    className="input-luxury text-xs"
+                                                    value={financeConfig.defaultCOGSId}
+                                                    onChange={e => setFinanceConfig({ ...financeConfig, defaultCOGSId: e.target.value })}
+                                                >
+                                                    <option value="">-- Pilih (5101) --</option>
+                                                    {coaList.filter(a => a.code.startsWith('5')).map(a => (
+                                                        <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[10px] text-text-secondary mt-1">Digunakan untuk jurnal otomatis HPP saat barang keluar (Future Update).</p>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* TAB 4: ACCOUNT SECURITY */}
                         {activeTab === 'account' && (
                             <>
                                 <SectionTitle title="Account Security" desc="Kelola akses keamanan akun admin." />
@@ -309,7 +467,7 @@ export default function SettingsPage() {
                             </>
                         )}
 
-                        {/* TAB 4: SYSTEM */}
+                        {/* TAB 5: SYSTEM MAINTENANCE */}
                         {activeTab === 'system' && (
                             <>
                                 <SectionTitle title="System Maintenance" desc="Tools untuk integritas data dan backup." />

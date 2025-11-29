@@ -1,17 +1,20 @@
+// app/(dashboard)/sales/manual/page.js
 "use client";
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, doc, query, orderBy, serverTimestamp, increment, writeBatch, addDoc } from 'firebase/firestore';
-import { formatRupiah, sortBySize } from '@/lib/utils';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, doc, query, orderBy, serverTimestamp, increment, writeBatch, addDoc, getDoc } from 'firebase/firestore';
+import { formatRupiah, sortBySize } from '@/lib/utils'; // FIX: sortBySize dikembalikan
 import { Portal } from '@/lib/usePortal';
 import toast from 'react-hot-toast'; 
 import PageHeader from '@/components/PageHeader';
-
-// --- MODERN UI LIBRARIES ---
-import { Search, RotateCcw, ShoppingCart, User, Plus, X, Trash2, CreditCard, ChevronRight, Package, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, Search, RotateCcw, ShoppingCart, User, Plus, X, Trash2, CreditCard, ChevronRight, Package, Phone, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Fuse from 'fuse.js';
 import { NumericFormat } from 'react-number-format';
+import { useAuth } from '@/context/AuthContext';
+
+// --- INTEGRASI FINANCE (SSOT) ---
+import { recordTransaction } from '@/lib/transactionService';
 
 // KONFIGURASI CACHE
 const CACHE_POS_MASTER = 'lumina_pos_master_v2';
@@ -20,6 +23,8 @@ const CACHE_DURATION_MASTER = 30 * 60 * 1000;
 const CACHE_DURATION_SNAPSHOTS = 5 * 60 * 1000;
 
 export default function PosPage() {
+    const { user } = useAuth();
+
     // --- STATE MANAGEMENT ---
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
@@ -71,18 +76,6 @@ export default function PosPage() {
         c.name.toLowerCase().includes(custSearch.toLowerCase())
     );
 
-    // --- HELPER: INVALIDATE CACHE (RESTORED) ---
-    const invalidateRelatedCaches = () => {
-        if (typeof window === 'undefined') return;
-        localStorage.removeItem(CACHE_POS_SNAPSHOTS);
-        // Hapus cache laporan & dashboard agar data sync real-time
-        localStorage.removeItem('lumina_inventory_v2');
-        localStorage.removeItem('lumina_dash_master_v3');
-        localStorage.removeItem('lumina_sales_history_v2');
-        localStorage.removeItem('lumina_balance_v2');
-        localStorage.removeItem('lumina_cash_data_v2');
-    };
-
     // --- INITIAL LOAD ---
     const loadMasterData = async (forceRefresh = false) => {
         setLoading(true);
@@ -90,7 +83,6 @@ export default function PosPage() {
             if (typeof window === 'undefined') return;
             let masterData = null;
             
-            // Cek Cache
             if (!forceRefresh) {
                 const cachedPos = localStorage.getItem(CACHE_POS_MASTER);
                 if (cachedPos) {
@@ -102,7 +94,6 @@ export default function PosPage() {
                 }
             }
 
-            // Fetch jika kosong
             if (!masterData) {
                 const [whS, prodS, varS, custS, accS] = await Promise.all([
                     getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
@@ -128,8 +119,12 @@ export default function PosPage() {
                 setLastRefresh(new Date());
             }
 
+            // Filter Akun: Hanya Aset Lancar (Kas/Bank) agar kasir tidak salah pilih
             const allowedCodes = ['1101', '1102', '1103', '1104', '1201'];
-            const filteredAccounts = (masterData.acc || []).filter(a => allowedCodes.includes(String(a.code)));
+            const filteredAccounts = (masterData.acc || []).filter(a => 
+                allowedCodes.includes(String(a.code)) || 
+                (a.category && a.category.includes('ASET'))
+            );
 
             setWarehouses(masterData.wh);
             setCustomers(masterData.cust);
@@ -145,7 +140,6 @@ export default function PosPage() {
                 if(defAcc) setPaymentAccId(defAcc.id);
             }
 
-            // Load Snapshots
             let stockData = {};
             const cachedSnaps = localStorage.getItem(CACHE_POS_SNAPSHOTS);
             if (!forceRefresh && cachedSnaps) {
@@ -170,21 +164,16 @@ export default function PosPage() {
         loadMasterData(true).then(() => toast.success("Katalog Terupdate!", { id: t }));
     };
 
-    // --- LOGIC: SMART PAYMENT AUTOFILL (RESTORED) ---
-    useEffect(() => {
-        const selectedAcc = accounts.find(a => a.id === paymentAccId);
-        if (selectedAcc) {
-            const accName = selectedAcc.name.toLowerCase();
-            const isCash = accName.includes('tunai');
-            
-            const currentTotal = cart.reduce((a,b) => a + (b.price * b.qty), 0);
-            
-            // Jika BUKAN Tunai (Transfer/QRIS), isi otomatis
-            if (!isCash && currentTotal > 0) {
-                setCashReceived(currentTotal);
-            }
-        }
-    }, [paymentAccId, cart, accounts]);
+    const invalidateRelatedCaches = () => {
+        if (typeof window === 'undefined') return;
+        localStorage.removeItem(CACHE_POS_SNAPSHOTS);
+        localStorage.removeItem('lumina_inventory_v2');
+        localStorage.removeItem('lumina_dash_master_v3');
+        localStorage.removeItem('lumina_sales_history_v2');
+        localStorage.removeItem('lumina_balance_v2');
+        localStorage.removeItem('lumina_cash_data_v2');
+        localStorage.removeItem('lumina_cash_transactions_v2'); // Clear Finance Cache
+    };
 
     // --- SHORTCUTS ---
     useEffect(() => {
@@ -197,7 +186,19 @@ export default function PosPage() {
         return () => window.removeEventListener('keydown', handleKey);
     }, [cart, paymentAccId, cashReceived, selectedCustId, selectedWh]); 
 
-    // --- LOGIC ---
+    // --- AUTO FILL CASH ---
+    useEffect(() => {
+        const selectedAcc = accounts.find(a => a.id === paymentAccId);
+        if (selectedAcc) {
+            const accName = selectedAcc.name.toLowerCase();
+            const isCash = accName.includes('tunai') || accName.includes('cash');
+            const currentTotal = cart.reduce((a,b) => a + (b.price * b.qty), 0);
+            if (!isCash && currentTotal > 0) {
+                setCashReceived(currentTotal);
+            }
+        }
+    }, [paymentAccId, cart, accounts]);
+
     const addToCart = (variant, prodName) => {
         const key = `${variant.id}_${selectedWh}`; 
         const max = snapshots[key] || 0;
@@ -253,14 +254,36 @@ export default function PosPage() {
         } catch(e) { toast.error(e.message, { id: tId }); }
     };
 
+    // --- UPDATED CHECKOUT LOGIC WITH SSOT FINANCE ---
     const handleCheckout = async () => {
         if(cart.length === 0) return toast.error("Keranjang kosong");
         const totalRevenue = cart.reduce((a,b) => a + (b.price * b.qty), 0);
         const received = parseInt(cashReceived) || 0;
         if(received < totalRevenue) return toast.error("Uang kurang!");
+        if(!paymentAccId) return toast.error("Pilih metode pembayaran (Akun Kas)");
         
         const toastId = toast.loading("Processing...");
         try {
+            // 1. Ambil Settings untuk Mapping Akun Revenue (Pendapatan)
+            let revenueAccId = '';
+            const settingSnap = await getDoc(doc(db, "settings", "general"));
+            if(settingSnap.exists()) {
+                revenueAccId = settingSnap.data().financeConfig?.defaultRevenueId || '';
+            }
+
+            // Fallback: Cari manual kode 4101 jika belum disetting (Smart Default)
+            if (!revenueAccId) {
+                const accQ = query(collection(db, "chart_of_accounts"), orderBy("code"));
+                const accS = await getDocs(accQ);
+                const found = accS.docs.find(d => d.data().code === '4101');
+                if (found) revenueAccId = found.id;
+            }
+
+            // Peringatan jika akun pendapatan tidak ditemukan (tetap lanjut agar tidak blocking)
+            if (!revenueAccId) {
+                console.warn("Akun Pendapatan (4101) belum disetting. Transaksi akan masuk Uncategorized.");
+            }
+
             const orderId = `POS-${Date.now().toString().slice(-6)}`;
             const custName = selectedCustId ? customers.find(c => c.id === selectedCustId).name : 'Guest';
             const batch = writeBatch(db);
@@ -271,36 +294,47 @@ export default function PosPage() {
                 qty: i.qty, unit_price: i.price, unit_cost: i.cost, gross_profit_per_item: (i.price - i.cost) * i.qty
             }));
 
+            // A. Create Sales Order
             const soRef = doc(collection(db, "sales_orders"));
             batch.set(soRef, {
                 order_number: orderId, source_file: 'pos_manual',
                 channel_store_name: 'POS / Kasir Toko', warehouse_id: selectedWh,
-                warehouse_master_name: warehouses.find(w=>w.id===selectedWh)?.name || 'Unknown',
                 customer_id: selectedCustId || null, buyer_name: custName,
                 financial: { subtotal: totalRevenue, total_sales: totalRevenue, net_payout: totalRevenue, total_hpp: totalCost, gross_profit: totalRevenue - totalCost },
                 operational: { status_pickup: 'completed' }, status: 'completed', payment_status: 'paid', payment_account_id: paymentAccId,
-                order_date: serverTimestamp(), order_created_at: serverTimestamp(), items_preview: orderItems
+                order_date: serverTimestamp(), items_preview: orderItems
             });
 
+            // B. Create Items & Stock Movements
             for(const item of orderItems) {
                 const itemRef = doc(collection(db, `sales_orders/${soRef.id}/items`));
                 batch.set(itemRef, item);
+                
                 const moveRef = doc(collection(db, "stock_movements"));
                 batch.set(moveRef, { variant_id: item.variant_id, warehouse_id: selectedWh, type: 'sale_out', qty: -item.qty, ref_id: soRef.id, date: serverTimestamp() });
+                
                 const snapRef = doc(db, "stock_snapshots", `${item.variant_id}_${selectedWh}`);
                 batch.set(snapRef, { id: `${item.variant_id}_${selectedWh}`, variant_id: item.variant_id, warehouse_id: selectedWh, qty: increment(-item.qty) }, { merge: true });
             }
             
-            const cashRef = doc(collection(db, "cash_transactions"));
-            batch.set(cashRef, { type: 'in', amount: totalRevenue, date: serverTimestamp(), category: 'penjualan', account_id: paymentAccId, description: `POS ${orderId} - ${custName}`, ref_type: 'sales_order', ref_id: soRef.id });
-            const accRef = doc(db, "cash_accounts", paymentAccId); 
-            batch.update(accRef, { balance: increment(totalRevenue) });
+            // C. FINANCE AUTOMATION (Use Helper)
+            if (received > 0) {
+                recordTransaction(db, batch, {
+                    type: 'in',
+                    amount: totalRevenue,
+                    walletId: paymentAccId,
+                    categoryId: revenueAccId, // Menggunakan ID Akun 4101 dari Settings
+                    categoryName: 'Pendapatan Penjualan',
+                    description: `POS ${orderId} - ${custName}`,
+                    refType: 'sales_order',
+                    refId: soRef.id,
+                    userEmail: user?.email
+                });
+            }
 
             await batch.commit();
-            invalidateRelatedCaches(); // CLEAN CACHE AGAR REALTIME
+            invalidateRelatedCaches();
             
-            // Local Update
-            localStorage.removeItem(CACHE_POS_SNAPSHOTS);
             const newSnaps = { ...snapshots };
             cart.forEach(i => { const key = `${i.id}_${selectedWh}`; if (newSnaps[key]) newSnaps[key] -= i.qty; });
             setSnapshots(newSnaps);
@@ -308,6 +342,7 @@ export default function PosPage() {
             setInvoiceData({ id: orderId, total: totalRevenue, received, change: received - totalRevenue, items: cart, date: new Date(), customer: custName }); 
             setModalInvoiceOpen(true); setCart([]); setCashReceived('');
             toast.success("Transaksi Berhasil!", { id: toastId });
+
         } catch(e) { console.error(e); toast.error(`Gagal: ${e.message}`, { id: toastId }); }
     };
 
@@ -343,57 +378,112 @@ export default function PosPage() {
             {/* --- LEFT: PRODUCTS CATALOG --- */}
             <div className={`w-full lg:w-2/3 flex flex-col gap-4 h-full ${activeMobileTab === 'products' ? 'flex' : 'hidden lg:flex'}`}>
                 
-                <PageHeader 
-                    title="Point of Sales" 
-                    subtitle="Kasir & Transaksi Cepat"
-                    actions={
-                        <div className="flex flex-col md:flex-row gap-3 items-center w-full md:w-auto">
-                            {/* SEARCH BAR MODERN */}
-                            <div className="relative flex-1 w-full md:w-72 group">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Search className="w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors" />
-                                </div>
-                                <input 
-                                    ref={searchInputRef} 
-                                    type="text" 
-                                    className="block w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-border rounded-xl 
-                                            text-text-primary placeholder:text-text-secondary/60 shadow-sm
-                                            focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all" 
-                                    placeholder="Cari Produk / Scan Barcode..." 
-                                    value={searchTerm} 
-                                    onChange={e => setSearchTerm(e.target.value)} 
-                                    onKeyDown={handleSearchEnter} 
-                                />
-                                <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                                    <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">F2</span>
-                                </div>
-                            </div>
-                            
-                            {/* REFRESH BUTTON */}
+                {/* === CUSTOM MOBILE HEADER (md:hidden) === */}
+                <div className="md:hidden mb-2 bg-surface p-4 rounded-2xl border border-border shadow-sm">
+                    {/* Row 1: Title & Controls */}
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <h1 className="text-xl font-display font-bold text-text-primary">Point of Sales</h1>
+                            <p className="text-[10px] text-text-secondary mt-0.5 font-medium">Kasir & Transaksi Cepat</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {/* Refresh Button */}
                             <button 
                                 onClick={handleRefresh} 
-                                className="bg-white hover:bg-gray-50 text-text-secondary hover:text-primary border border-border rounded-xl w-10 h-10 flex items-center justify-center transition-all shadow-sm hover:shadow active:scale-95"
-                                title="Refresh Data"
+                                className="w-9 h-9 flex items-center justify-center bg-gray-50 hover:bg-gray-100 border border-border rounded-xl text-text-secondary transition-colors active:scale-95"
                             >
-                                <RotateCcw className="w-4 h-4" />
+                                <RotateCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                             </button>
-
-                            {/* WAREHOUSE SELECT */}
-                            <div className="relative">
+                            
+                            {/* Warehouse Dropdown */}
+                            <div className="relative w-32">
                                 <select 
-                                    className="appearance-none w-full md:w-48 pl-4 pr-10 py-2.5 text-xs font-bold bg-white border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 text-text-primary shadow-sm cursor-pointer transition-all" 
+                                    className="appearance-none w-full pl-3 pr-8 py-2 text-[10px] font-bold bg-gray-50 border border-border rounded-xl focus:outline-none focus:border-primary text-text-primary"
                                     value={selectedWh} 
                                     onChange={e=>setSelectedWh(e.target.value)}
                                 >
                                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                                 </select>
-                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-secondary">
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                                <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-text-secondary">
+                                    <ChevronRight className="w-3 h-3 rotate-90" />
                                 </div>
                             </div>
                         </div>
-                    }
-                />
+                    </div>
+
+                    {/* Row 2: Search Bar */}
+                    <div className="relative w-full group">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors" />
+                        </div>
+                        <input 
+                            ref={searchInputRef}
+                            type="text" 
+                            className="block w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-border rounded-xl 
+                                    text-text-primary placeholder:text-text-secondary/60
+                                    focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" 
+                            placeholder="Cari Produk / Scan..." 
+                            value={searchTerm} 
+                            onChange={e => setSearchTerm(e.target.value)} 
+                            onKeyDown={handleSearchEnter} 
+                        />
+                         <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                            <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">F2</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* === DESKTOP HEADER (hidden md:block) === */}
+                <div className="hidden md:block">
+                    <PageHeader 
+                        title="Point of Sales" 
+                        subtitle="Kasir & Transaksi Cepat"
+                        actions={
+                            <div className="flex flex-col md:flex-row gap-3 items-center w-full md:w-auto">
+                                <div className="relative flex-1 w-full md:w-72 group">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Search className="w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors" />
+                                    </div>
+                                    <input 
+                                        ref={searchInputRef} 
+                                        type="text" 
+                                        className="block w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-border rounded-xl 
+                                                text-text-primary placeholder:text-text-secondary/60 shadow-sm
+                                                focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all" 
+                                        placeholder="Cari Produk / Scan Barcode..." 
+                                        value={searchTerm} 
+                                        onChange={e => setSearchTerm(e.target.value)} 
+                                        onKeyDown={handleSearchEnter} 
+                                    />
+                                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                                        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">F2</span>
+                                    </div>
+                                </div>
+                                
+                                <button 
+                                    onClick={handleRefresh} 
+                                    className="bg-white hover:bg-gray-50 text-text-secondary hover:text-primary border border-border rounded-xl w-10 h-10 flex items-center justify-center transition-all shadow-sm hover:shadow active:scale-95"
+                                    title="Refresh Data"
+                                >
+                                    <RotateCcw className="w-4 h-4" />
+                                </button>
+
+                                <div className="relative">
+                                    <select 
+                                        className="appearance-none w-full md:w-48 pl-4 pr-10 py-2.5 text-xs font-bold bg-white border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 text-text-primary shadow-sm cursor-pointer transition-all" 
+                                        value={selectedWh} 
+                                        onChange={e=>setSelectedWh(e.target.value)}
+                                    >
+                                        {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                                    </select>
+                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-secondary">
+                                        <ChevronRight className="w-4 h-4 rotate-90" />
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    />
+                </div>
 
                 {/* PRODUCT GRID (Animated) */}
                 <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-0">
@@ -436,20 +526,32 @@ export default function PosPage() {
                 </div>
             </div>
             
-            {/* --- RIGHT: CART PANEL (Modern) --- */}
+            {/* --- RIGHT: CART PANEL (Modern with Mobile Close) --- */}
             <motion.div 
                 initial={{ x: 20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 className={`w-full lg:w-[380px] xl:w-[420px] bg-white border-l border-border shadow-2xl flex flex-col h-full z-30 ${activeMobileTab === 'cart' ? 'fixed inset-0' : 'hidden lg:flex'}`}
             >
+                {/* 1. Header: Clean Title & Clear Button */}
                 <div className="p-5 border-b border-border bg-white flex justify-between items-center shrink-0 z-10">
-                    <div>
-                        <h3 className="font-display font-bold text-text-primary text-xl flex items-center gap-2">
-                            <ShoppingCart className="w-5 h-5 text-primary" />
-                            Current Order
-                        </h3>
-                        <p className="text-xs text-text-secondary mt-0.5 font-medium">{cart.length} items added</p>
+                    <div className="flex items-center gap-3">
+                        {/* MOBILE: CLOSE BUTTON (Updated) */}
+                        <button 
+                            onClick={() => setActiveMobileTab('products')} 
+                            className="lg:hidden p-2 -ml-2 text-text-secondary hover:text-primary hover:bg-gray-100 rounded-full transition-colors"
+                        >
+                            <ArrowLeft className="w-6 h-6" />
+                        </button>
+
+                        <div>
+                            <h3 className="font-display font-bold text-text-primary text-xl flex items-center gap-2">
+                                <ShoppingCart className="w-5 h-5 text-primary" />
+                                Order
+                            </h3>
+                            <p className="text-xs text-text-secondary mt-0.5 font-medium">{cart.length} items added</p>
+                        </div>
                     </div>
+
                     <button 
                         onClick={()=>setCart([])} 
                         className="text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 group"
@@ -534,7 +636,16 @@ export default function PosPage() {
                             <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-border shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
                                 <span className="text-xs font-bold text-text-secondary uppercase ml-1">Uang Diterima</span>
                                 <div className="flex items-center">
-                                    <NumericFormat className="text-right font-bold text-text-primary bg-transparent outline-none w-40 text-xl placeholder:text-gray-300" placeholder="0" value={cashReceived} thousandSeparator="." decimalSeparator="," prefix="Rp " allowNegative={false} onValueChange={(values) => { setCashReceived(values.floatValue || ''); }} />
+                                    <NumericFormat 
+                                        className="text-right font-bold text-text-primary bg-transparent outline-none w-40 text-xl placeholder:text-gray-300" 
+                                        placeholder="0" 
+                                        value={cashReceived} 
+                                        onValueChange={(values) => { setCashReceived(values.floatValue || ''); }}
+                                        prefix="Rp " 
+                                        thousandSeparator="." 
+                                        decimalSeparator="," // FIX: Wajib ada jika thousandSeparator titik
+                                        allowNegative={false}
+                                    />
                                 </div>
                             </div>
                             {(cashReceived > 0 || change !== 0) && (

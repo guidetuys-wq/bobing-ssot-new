@@ -2,65 +2,79 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, runTransaction, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, runTransaction, query, orderBy, limit, serverTimestamp, increment, getDoc, where, writeBatch } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
-import { usePurchaseCart } from '@/context/PurchaseCartContext'; // --- INTEGRASI 1: Import Context ---
 import { formatRupiah } from '@/lib/utils';
 import Link from 'next/link';
 import { Portal } from '@/lib/usePortal';
 import toast from 'react-hot-toast';
+import PageHeader from '@/components/PageHeader';
+
+// --- MODERN UI IMPORTS ---
+import { 
+    Plus, Search, Calendar, Building, CheckCircle, Clock, 
+    ChevronRight, X, FileText, Edit2, Trash2, AlertTriangle, Truck, Wallet, ArrowRight, Zap 
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// --- INTEGRASI FINANCE ---
+import { recordTransaction } from '@/lib/transactionService';
 
 // --- KONFIGURASI CACHE ---
 const CACHE_KEY_HISTORY = 'lumina_purchases_history_v2';
-const CACHE_KEY_MASTER = 'lumina_purchases_master_v2'; 
-const CACHE_DURATION_MASTER = 30 * 60 * 1000; 
-const CACHE_DURATION_HISTORY = 5 * 60 * 1000; 
-
-// Cache Keys External
-const CACHE_KEY_PRODUCTS = 'lumina_products_data_v2';
-const CACHE_KEY_VARIANTS = 'lumina_variants_v2';
+const CACHE_DURATION_HISTORY = 5 * 60 * 1000;
 
 export default function PurchasesPage() {
     const { user } = useAuth();
-    
-    // --- INTEGRASI 2: Ambil Data Cart Global ---
-    const { cart: globalCart, clearCart } = usePurchaseCart();
-    
-    // Data State
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     
-    // Master Data State
+    // Modal & Data States
+    const [modalOpen, setModalOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    // Dev Tool States
+    const [isDevPayModalOpen, setIsDevPayModalOpen] = useState(false);
+    const [devWalletId, setDevWalletId] = useState('');
+    
+    // Master Data
     const [warehouses, setWarehouses] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [products, setProducts] = useState([]);
     const [variants, setVariants] = useState([]);
     
-    // UI/Form State
-    const [modalOpen, setModalOpen] = useState(false);
-    const [cart, setCart] = useState([]); // Local cart untuk manipulasi di modal
-    
+    // Finance Data (New)
+    const [wallets, setWallets] = useState([]); 
+    const [financeConfig, setFinanceConfig] = useState({});
+
+    // Form States
+    const [cart, setCart] = useState([]);
     const [formData, setFormData] = useState({ 
+        id: null, 
         supplier_id: '', 
         warehouse_id: '', 
-        date: '', 
-        notes: '' 
+        date: new Date().toISOString().split('T')[0], 
+        isPaid: false,
+        wallet_id: '' 
     });
-    
     const [inputItem, setInputItem] = useState({ variant_id: '', qty: '', cost: '' });
-
-    // Helper: Invalidate Cache
-    const invalidateRelatedCaches = () => {
-        if (typeof window === 'undefined') return;
-        localStorage.removeItem(CACHE_KEY_HISTORY); 
-    };
 
     useEffect(() => { 
         fetchHistory(); 
         fetchMasterData(); 
     }, []);
 
-    // --- FETCHING LOGIC (Sama seperti sebelumnya) ---
+    const invalidateRelatedCaches = () => {
+        if (typeof window === 'undefined') return;
+        localStorage.removeItem(CACHE_KEY_HISTORY); 
+        localStorage.removeItem('lumina_inventory_v2'); 
+        localStorage.removeItem('lumina_pos_snapshots_v2'); 
+        localStorage.removeItem('lumina_dash_master_v4'); 
+        localStorage.removeItem('lumina_purchases_master_v2');
+        localStorage.removeItem('lumina_balance_v2');
+        localStorage.removeItem('lumina_cash_transactions_v2');
+    };
+
     const fetchHistory = async (forceRefresh = false) => {
         setLoading(true);
         try {
@@ -69,8 +83,7 @@ export default function PurchasesPage() {
                 if (cached) {
                     const { data, ts } = JSON.parse(cached);
                     if (Date.now() - ts < CACHE_DURATION_HISTORY) {
-                        const revived = data.map(d => ({ ...d, order_date: new Date(d.order_date) }));
-                        setHistory(revived);
+                        setHistory(data.map(d => ({ ...d, order_date: new Date(d.order_date) })));
                         setLoading(false);
                         return;
                     }
@@ -79,103 +92,115 @@ export default function PurchasesPage() {
 
             const q = query(collection(db, "purchase_orders"), orderBy("order_date", "desc"), limit(50));
             const snap = await getDocs(q);
-            const data = []; 
-            snap.forEach(d => {
-                const docData = d.data();
-                data.push({ id: d.id, ...docData, order_date: docData.order_date.toDate() });
-            });
+            const data = snap.docs.map(d => ({ id: d.id, ...d.data(), order_date: d.data().order_date.toDate() }));
             
             setHistory(data);
+            if (typeof window !== 'undefined') localStorage.setItem(CACHE_KEY_HISTORY, JSON.stringify({ data, ts: Date.now() }));
 
-            if (typeof window !== 'undefined') {
-                localStorage.setItem(CACHE_KEY_HISTORY, JSON.stringify({ data: data, ts: Date.now() }));
-            }
-        } catch (e) { 
-            console.error(e);
-            toast.error("Gagal memuat riwayat PO");
-        } finally { 
-            setLoading(false); 
-        }
+        } catch (e) { console.error(e); toast.error("Gagal memuat riwayat PO"); } 
+        finally { setLoading(false); }
     };
 
     const fetchMasterData = async () => {
-        // ... (Logika fetch master data tetap sama untuk menghemat baris di sini) ...
-        // Pastikan Anda menyalin logika fetchMasterData yang sudah ada sebelumnya
-        // atau gunakan yang dari file sebelumnya karena tidak ada perubahan di sini.
         try {
-            if (typeof window === 'undefined') return;
-            // (Logika Caching Master Data standard...)
-            // Agar ringkas, saya asumsikan fungsi ini ada dan sama persis.
-            // Jika butuh saya tulis ulang, kabari saja.
-            
-            // Implementasi singkat untuk kelengkapan file:
-            let whList = [], suppList = [];
-            const cachedMaster = localStorage.getItem(CACHE_KEY_MASTER);
-            if(cachedMaster) {
-                const p = JSON.parse(cachedMaster);
-                if(Date.now()-p.ts < CACHE_DURATION_MASTER) { whList=p.warehouses; suppList=p.suppliers; }
+            const [whS, supS, prodS, varS, accS, setS] = await Promise.all([
+                getDocs(collection(db, "warehouses")),
+                getDocs(collection(db, "suppliers")),
+                getDocs(collection(db, "products")),
+                getDocs(collection(db, "product_variants")),
+                getDocs(query(collection(db, "chart_of_accounts"), orderBy("code"))),
+                getDoc(doc(db, "settings", "general"))
+            ]);
+
+            setWarehouses(whS.docs.map(d=>({id:d.id, ...d.data()})));
+            setSuppliers(supS.docs.map(d=>({id:d.id, ...d.data()})));
+            setProducts(prodS.docs.map(d=>({id:d.id, ...d.data()})));
+            setVariants(varS.docs.map(d=>({id:d.id, ...d.data()})));
+
+            const wList = accS.docs.map(d => ({id:d.id, ...d.data()}))
+                .filter(a => {
+                    const cat = (a.category||'').toUpperCase();
+                    return a.code.startsWith('1') && (cat.includes('ASET') || cat.includes('KAS') || cat.includes('BANK'));
+                });
+            setWallets(wList);
+            // Set default wallet untuk dev tool
+            if(wList.length > 0) setDevWalletId(wList[0].id);
+
+            if(setS.exists()) {
+                setFinanceConfig(setS.data().financeConfig || {});
             }
-            if(whList.length===0) {
-                 const sWh = await getDocs(query(collection(db, "warehouses"), orderBy("created_at")));
-                 sWh.forEach(d => { if(d.data().type==='physical' || !d.data().type) whList.push({id:d.id, ...d.data()}) });
-                 const sSupp = await getDocs(query(collection(db, "suppliers"), orderBy("name")));
-                 sSupp.forEach(d => suppList.push({id:d.id, ...d.data()}));
-                 localStorage.setItem(CACHE_KEY_MASTER, JSON.stringify({ warehouses: whList, suppliers: suppList, ts: Date.now() }));
-            }
-            setWarehouses(whList);
-            setSuppliers(suppList);
-            
-            // Fetch Products/Variants untuk dropdown manual
-            const cachedVar = localStorage.getItem(CACHE_KEY_VARIANTS);
-            const cachedProd = localStorage.getItem(CACHE_KEY_PRODUCTS);
-            let vData = [], pData = [];
-            
-            if(cachedVar) { vData = JSON.parse(cachedVar).data || []; }
-            else { 
-                const s = await getDocs(query(collection(db, "product_variants"), orderBy("sku")));
-                s.forEach(d=>vData.push({id:d.id,...d.data()}));
-            }
-            if(cachedProd) { pData = JSON.parse(cachedProd).products || []; }
-            else {
-                const s = await getDocs(collection(db, "products"));
-                s.forEach(d=>pData.push({id:d.id,...d.data()}));
-            }
-            
-            setVariants(vData);
-            setProducts(pData);
+
         } catch(e) { console.error(e); }
     };
 
-    // --- INTEGRASI 3: Handler Buka Modal dengan Data Cart ---
-    const handleNewPO = () => {
-        // Reset Form
-        setFormData({ 
-            supplier_id: '', 
-            warehouse_id: '', 
-            date: new Date().toISOString().split('T')[0], 
-            notes: '' 
-        });
+    // --- DEV TOOL: OPEN MODAL ---
+    const handleDevPayAllClick = () => {
+        setIsDevPayModalOpen(true);
+    };
 
-        // Cek Global Cart
-        if (globalCart.length > 0) {
-            // Masukkan data dari Inventory ke Form Cart
-            // Pastikan struktur datanya cocok
-            const mappedCart = globalCart.map(item => ({
-                variant_id: item.variant_id,
-                sku: item.sku,
-                name: item.name,
-                spec: item.spec || '-',
-                qty: item.qty > 0 ? item.qty : 1, // Default 1 jika user belum isi qty di inventory
-                unit_cost: item.unit_cost || 0
-            }));
+    // --- DEV TOOL: EXECUTE PAY ALL ---
+    const executeDevPayAll = async () => {
+        if(!devWalletId) return toast.error("Pilih akun pembayaran!");
+
+        const tId = toast.loading("Dev: Processing Batch Payment...");
+        try {
+            // 1. Cari semua yang unpaid
+            const q = query(collection(db, "purchase_orders"), where("payment_status", "==", "unpaid"));
+            const snap = await getDocs(q);
             
-            setCart(mappedCart);
-            toast.success(`${mappedCart.length} Item dimuat dari Draft!`, { icon: '🚀' });
-        } else {
-            setCart([]);
+            if (snap.empty) {
+                toast.dismiss(tId);
+                setIsDevPayModalOpen(false);
+                return toast("Semua PO sudah Paid!");
+            }
+
+            const batch = writeBatch(db);
+            const inventoryAccId = financeConfig.defaultInventoryId || '1301-fallback';
+
+            let totalPaidBatch = 0;
+
+            snap.forEach(d => {
+                const po = d.data();
+                const poAmount = po.total_amount || 0;
+                
+                // A. Update Status PO
+                batch.update(doc(db, "purchase_orders", d.id), {
+                    payment_status: 'paid',
+                    amount_paid: poAmount,
+                    updated_at: serverTimestamp(),
+                    updated_by: 'DEV_TOOL_BATCH'
+                });
+
+                // B. Record Finance Transaction (Double Entry)
+                // Satu per satu atau digabung? Idealnya satu per satu agar trace-nya jelas.
+                if (poAmount > 0) {
+                    recordTransaction(db, batch, {
+                        type: 'out',
+                        amount: poAmount,
+                        walletId: devWalletId,
+                        categoryId: inventoryAccId,
+                        categoryName: 'Pembelian Stok (Batch)',
+                        description: `Batch Pay PO #${d.id.substring(0,8)}`,
+                        refType: 'purchase_order',
+                        refId: d.id,
+                        userEmail: user?.email
+                    });
+                    totalPaidBatch += poAmount;
+                }
+            });
+
+            await batch.commit();
+            
+            invalidateRelatedCaches();
+            fetchHistory(true);
+            setIsDevPayModalOpen(false);
+            
+            toast.success(`Sukses! ${snap.size} PO Lunas. Total: ${formatRupiah(totalPaidBatch)}`, { id: tId });
+
+        } catch (e) {
+            console.error(e);
+            toast.error("Dev Error: " + e.message, { id: tId });
         }
-        
-        setModalOpen(true);
     };
 
     const addItem = () => {
@@ -184,10 +209,11 @@ export default function PurchasesPage() {
         const v = variants.find(x => x.id === variant_id);
         const p = products.find(x => x.id === v.product_id);
         
-        const existingIdx = cart.findIndex(c => c.variant_id === variant_id);
-        if(existingIdx >= 0) {
+        const existIdx = cart.findIndex(c => c.variant_id === variant_id);
+        if(existIdx >= 0) {
             const newCart = [...cart];
-            newCart[existingIdx].qty += parseInt(qty);
+            newCart[existIdx].qty += parseInt(qty);
+            newCart[existIdx].unit_cost = parseInt(cost);
             setCart(newCart);
         } else {
             setCart([...cart, { 
@@ -208,283 +234,476 @@ export default function PurchasesPage() {
         setCart(newCart);
     };
 
+    // --- HANDLE EDIT ---
+    const handleEdit = async (po) => {
+        const tId = toast.loading("Memuat data PO...");
+        try {
+            const itemsSnap = await getDocs(collection(db, `purchase_orders/${po.id}/items`));
+            const items = [];
+            itemsSnap.forEach(d => {
+                const i = d.data();
+                const v = variants.find(x => x.id === i.variant_id);
+                const p = products.find(x => x.id === v?.product_id);
+                items.push({
+                    variant_id: i.variant_id,
+                    qty: i.qty,
+                    unit_cost: i.unit_cost,
+                    sku: v?.sku || 'Unknown',
+                    name: p?.name || 'Unknown',
+                    spec: v ? `${v.color}/${v.size}` : '-'
+                });
+            });
+
+            setFormData({
+                id: po.id,
+                supplier_id: suppliers.find(s => s.name === po.supplier_name)?.id || '',
+                warehouse_id: po.warehouse_id,
+                date: new Date(po.order_date).toISOString().split('T')[0],
+                isPaid: po.payment_status === 'paid',
+                wallet_id: '' 
+            });
+            setCart(items);
+            setModalOpen(true);
+            toast.dismiss(tId);
+        } catch (e) {
+            toast.error("Gagal memuat data edit", { id: tId });
+        }
+    };
+
+    // --- SUBMIT PO ---
     const submitPO = async (e) => {
         e.preventDefault();
         if(cart.length === 0) return toast.error("Keranjang kosong");
+        if(formData.isPaid && !formData.wallet_id) return toast.error("Pilih Akun Pembayaran (Kas/Bank)!");
         
-        const toastId = toast.loading("Menyimpan PO...");
+        const isEditMode = !!formData.id;
+        const toastId = toast.loading(isEditMode ? "Update PO..." : "Memproses PO...");
+        
         try {
             const totalAmount = cart.reduce((a,b) => a + (b.qty * b.unit_cost), 0);
             const totalQty = cart.reduce((a,b) => a + b.qty, 0);
-            const supplierName = suppliers.find(s => s.id === formData.supplier_id)?.name;
+            const supplierName = suppliers.find(s => s.id === formData.supplier_id)?.name || 'Unknown';
+            const inventoryAccId = financeConfig.defaultInventoryId || '1301-fallback'; 
+
+            let oldItems = [];
+            let oldPOData = null;
             
+            if (isEditMode) {
+                const oldPORef = doc(db, "purchase_orders", formData.id);
+                const oldPOSnap = await getDoc(oldPORef);
+                oldPOData = oldPOSnap.data();
+                
+                const oldItemsSnap = await getDocs(collection(db, `purchase_orders/${formData.id}/items`));
+                oldItems = oldItemsSnap.docs.map(d => ({ docId: d.id, ...d.data() })); 
+            }
+
             await runTransaction(db, async (t) => {
-                const poRef = doc(collection(db, "purchase_orders"));
+                const snapshotMap = {}; 
+                const snapIdsToRead = new Set();
                 
-                // HEADER PO (Status OPEN, belum stok masuk)
-                t.set(poRef, { 
-                    po_number: `PO-${Date.now()}`,
-                    supplier_id: formData.supplier_id, 
-                    supplier_name: supplierName,
-                    warehouse_id: formData.warehouse_id, 
-                    order_date: new Date(formData.date), 
+                if (isEditMode) oldItems.forEach(item => snapIdsToRead.add(`${item.variant_id}_${oldPOData.warehouse_id}`));
+                cart.forEach(item => snapIdsToRead.add(`${item.variant_id}_${formData.warehouse_id}`));
+
+                const snapKeys = Array.from(snapIdsToRead);
+                const snapReads = await Promise.all(snapKeys.map(key => t.get(doc(db, "stock_snapshots", key))));
+                snapKeys.forEach((key, index) => snapshotMap[key] = snapReads[index]);
+
+                if (isEditMode) {
+                    oldItems.forEach(item => {
+                        t.delete(doc(db, `purchase_orders/${formData.id}/items`, item.docId));
+                    });
+
+                    if (oldPOData.payment_status === 'paid' && formData.wallet_id) {
+                        // Revert Transaksi Lama (Refund Masuk)
+                        recordTransaction(db, t, { // Note: runTransaction passes `t` which acts like batch
+                            type: 'in',
+                            amount: oldPOData.total_amount,
+                            walletId: formData.wallet_id,
+                            categoryId: inventoryAccId,
+                            categoryName: 'Koreksi Pembelian',
+                            description: `Revisi PO #${formData.id.substring(0,8)}`,
+                            refType: 'purchase_correction',
+                            refId: formData.id,
+                            userEmail: user?.email
+                        });
+                    }
+                }
+
+                const poRef = isEditMode ? doc(db, "purchase_orders", formData.id) : doc(collection(db, "purchase_orders"));
+                const poData = { 
+                    supplier_name: supplierName, warehouse_id: formData.warehouse_id, 
+                    order_date: new Date(formData.date), status: 'received_full', 
+                    total_amount: totalAmount, total_qty: totalQty, 
+                    payment_status: formData.isPaid ? 'paid' : 'unpaid', 
+                    amount_paid: formData.isPaid ? totalAmount : 0, 
+                    updated_at: serverTimestamp(), updated_by: user?.email 
+                };
+                if (!isEditMode) { poData.created_at = serverTimestamp(); poData.created_by = user?.email; }
+                t.set(poRef, poData, { merge: true });
+
+                const stockChanges = {};
+                if (isEditMode) {
+                    oldItems.forEach(item => {
+                        const key = `${item.variant_id}_${oldPOData.warehouse_id}`;
+                        stockChanges[key] = (stockChanges[key] || 0) - item.qty;
+                    });
+                }
+                cart.forEach(item => {
+                    const key = `${item.variant_id}_${formData.warehouse_id}`;
+                    stockChanges[key] = (stockChanges[key] || 0) + item.qty;
                     
-                    fulfillment_status: 'OPEN', 
-                    payment_status: 'UNPAID',
-                    
-                    total_amount: totalAmount, 
-                    total_qty: totalQty, 
-                    amount_paid: 0, 
-                    
-                    notes: formData.notes,
-                    created_at: serverTimestamp(), 
-                    created_by: user?.email 
+                    const newItemRef = doc(collection(db, `purchase_orders/${poRef.id}/items`));
+                    t.set(newItemRef, { variant_id: item.variant_id, qty: item.qty, unit_cost: item.unit_cost, subtotal: item.qty*item.unit_cost });
+
+                    const moveRef = doc(collection(db, "stock_movements"));
+                    t.set(moveRef, { 
+                        variant_id: item.variant_id, warehouse_id: formData.warehouse_id, 
+                        type: 'purchase_in', qty: item.qty, unit_cost: item.unit_cost, 
+                        ref_id: poRef.id, ref_type: 'purchase_order', 
+                        date: serverTimestamp(), notes: isEditMode ? `PO Upd ${supplierName}` : `PO ${supplierName}` 
+                    });
                 });
-                
-                // ITEMS
-                for(const i of cart) {
-                    t.set(doc(collection(db, `purchase_orders/${poRef.id}/items`)), { 
-                        variant_id: i.variant_id, 
-                        name: i.name,
-                        sku: i.sku,
-                        qty_ordered: i.qty,
-                        qty_received: 0,
-                        unit_cost: i.unit_cost, 
-                        subtotal: i.qty * i.unit_cost 
+
+                Object.entries(stockChanges).forEach(([key, delta]) => {
+                    if (delta === 0) return;
+                    const snapDoc = snapshotMap[key];
+                    const [varId, whId] = key.split('_');
+                    const snapRef = doc(db, "stock_snapshots", key);
+                    
+                    if (snapDoc && snapDoc.exists()) {
+                        t.update(snapRef, { qty: increment(delta) });
+                    } else {
+                        t.set(snapRef, { id: key, variant_id: varId, warehouse_id: whId, qty: delta });
+                    }
+                });
+
+                if (formData.isPaid) {
+                    recordTransaction(db, t, {
+                        type: 'out',
+                        amount: totalAmount,
+                        walletId: formData.wallet_id,
+                        categoryId: inventoryAccId,
+                        categoryName: 'Pembelian Stok',
+                        description: `Bayar PO ${supplierName}`,
+                        refType: 'purchase_order',
+                        refId: poRef.id,
+                        userEmail: user?.email
                     });
                 }
             });
 
-            // --- INTEGRASI 4: Bersihkan Global Cart ---
-            // Karena sudah jadi PO, draft di inventory dihapus
-            if (globalCart.length > 0) {
-                clearCart(); 
-            }
+            invalidateRelatedCaches();
+            toast.success(isEditMode ? "PO Diperbarui!" : "PO Berhasil Disimpan!", { id: toastId });
+            setModalOpen(false); fetchHistory(true); setCart([]);
+        } catch(e) { console.error(e); toast.error(`Gagal: ${e.message}`, { id: toastId }); }
+    };
+
+    // --- HANDLE DELETE ---
+    const handleDelete = async (po) => {
+        if(!confirm(`Yakin hapus PO dari ${po.supplier_name}? Stok akan ditarik kembali.`)) return;
+        
+        const tId = toast.loading("Menghapus...");
+        try {
+            let refundWalletId = wallets[0]?.id; 
+            
+            const itemsSnap = await getDocs(collection(db, `purchase_orders/${po.id}/items`));
+            const itemsToDelete = itemsSnap.docs.map(d => d.data());
+
+            await runTransaction(db, async (t) => {
+                const snapReads = await Promise.all(itemsToDelete.map(item => {
+                    const key = `${item.variant_id}_${po.warehouse_id}`;
+                    return t.get(doc(db, "stock_snapshots", key));
+                }));
+
+                itemsToDelete.forEach((item, index) => {
+                    const snapDoc = snapReads[index];
+                    if (snapDoc.exists()) {
+                        t.update(snapDoc.ref, { qty: increment(-item.qty) });
+                    }
+                    const moveRef = doc(collection(db, "stock_movements"));
+                    t.set(moveRef, {
+                        variant_id: item.variant_id, warehouse_id: po.warehouse_id,
+                        type: 'adjustment_opname', qty: -item.qty, 
+                        ref_id: po.id, ref_type: 'purchase_order_void',
+                        date: serverTimestamp(), notes: `Void PO ${po.id.substring(0,8)}`
+                    });
+                });
+
+                if (po.payment_status === 'paid' && po.total_amount > 0 && refundWalletId) {
+                    recordTransaction(db, t, {
+                        type: 'in',
+                        amount: po.total_amount,
+                        walletId: refundWalletId, // Refund ke akun default
+                        categoryId: financeConfig.defaultInventoryId || 'uncategorized',
+                        categoryName: 'Refund Pembelian',
+                        description: `Void PO ${po.supplier_name}`,
+                        refType: 'purchase_order_void',
+                        refId: po.id,
+                        userEmail: user?.email
+                    });
+                }
+
+                t.delete(doc(db, "purchase_orders", po.id));
+            });
 
             invalidateRelatedCaches();
-            toast.success("PO Berhasil Dibuat", { id: toastId });
-            setModalOpen(false); 
-            fetchHistory(true); 
-            setCart([]);
-            
-        } catch(e) { 
-            console.error(e);
-            toast.error(`Gagal: ${e.message}`, { id: toastId }); 
-        }
+            fetchHistory(true);
+            toast.success("PO Dihapus & Stok dikembalikan", { id: tId });
+
+        } catch (e) { console.error(e); toast.error("Gagal menghapus: " + e.message, { id: tId }); }
     };
+
+    const StatusBadge = ({ status }) => {
+        const isPaid = status === 'paid';
+        return (
+            <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                {isPaid ? <CheckCircle className="w-3 h-3"/> : <Clock className="w-3 h-3"/>}
+                {status}
+            </span>
+        );
+    };
+
+    const filteredHistory = history.filter(h => 
+        h.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        h.id.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     return (
         <div className="max-w-full mx-auto space-y-6 fade-in pb-20 px-4 md:px-8 pt-6 bg-background min-h-screen text-text-primary">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h2 className="text-xl md:text-3xl font-display font-bold text-text-primary tracking-tight">Purchase Orders</h2>
-                    <p className="text-sm text-text-secondary">Manage orders and incoming stock.</p>
-                </div>
-                <div className="flex gap-2">
-                    <Link href="/purchases/import" className="btn-ghost-dark">Import</Link>
-                    
-                    {/* --- INTEGRASI 5: Tombol Indikator Cart --- */}
-                    <button
-                        onClick={handleNewPO}
-                        className={`btn-gold flex items-center gap-2 ${globalCart.length > 0 ? 'animate-pulse ring-2 ring-white' : ''}`}
-                    >
-                        {globalCart.length > 0 ? (
-                            <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
-                                <span>Finalize Draft ({globalCart.length})</span>
-                            </>
-                        ) : (
-                            "New PO"
-                        )}
-                    </button>
-                </div>
+            
+            <PageHeader 
+                title="Purchase Orders" 
+                subtitle="Kelola pembelian stok dari supplier."
+                actions={
+                    <div className="flex gap-3">
+                        {/* --- DEV BUTTON: MARK ALL PAID --- */}
+                        <button 
+                            onClick={handleDevPayAllClick} 
+                            className="hidden md:flex btn-ghost-dark px-3 py-2 items-center gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+                            title="Dev Tool: Tandai semua PO Unpaid jadi Paid (Batch)"
+                        >
+                            <Zap className="w-4 h-4"/> Pay All (Dev)
+                        </button>
+
+                        <Link href="/purchases/import" className="hidden sm:flex btn-ghost-dark px-4 py-2 items-center gap-2">
+                            <FileText className="w-4 h-4"/> Import
+                        </Link>
+                        <button 
+                            onClick={() => { 
+                                setFormData({ id: null, supplier_id:'', warehouse_id:'', date: new Date().toISOString().split('T')[0], isPaid: false, wallet_id: wallets[0]?.id || ''}); 
+                                setCart([]); 
+                                setModalOpen(true); 
+                            }}
+                            className="btn-gold flex items-center gap-2 shadow-lg"
+                        >
+                            <Plus className="w-4 h-4 stroke-[3px]" /> New PO
+                        </button>
+                    </div>
+                }
+            />
+
+            {/* SEARCH BAR */}
+            <div className="relative group">
+                <Search className="w-4 h-4 text-text-secondary absolute left-3 top-3 group-focus-within:text-primary transition-colors" />
+                <input 
+                    className="w-full pl-10 py-2.5 bg-white border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-sm"
+                    placeholder="Cari Supplier / Order ID..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                />
             </div>
 
-            {/* Table Wrapper */}
-            <div className="card-luxury overflow-hidden">
-                <div className="table-wrapper-dark overflow-x-auto">
-                    <table className="table-dark w-full min-w-full">
-                        <thead>
-                            <tr>
-                                <th className="pl-6">Date</th>
-                                <th>Supplier</th>
-                                <th className="text-right">Total</th>
-                                <th className="text-center">Status Barang</th>
-                                <th className="text-center">Status Bayar</th>
-                                <th className="text-right pr-6">Actions</th>
+            {/* --- LIST VIEW --- */}
+            <div className="bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50/80 text-[11px] font-bold text-text-secondary uppercase tracking-wider border-b border-border">
+                        <tr>
+                            <th className="pl-6 py-4">Date</th>
+                            <th className="py-4">Supplier & ID</th>
+                            <th className="py-4 text-right">Total</th>
+                            <th className="py-4 text-center">Payment</th>
+                            <th className="py-4 text-right pr-6">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody className="text-sm divide-y divide-border/60">
+                        {loading ? <tr><td colSpan="5" className="p-8 text-center">Loading...</td></tr> : 
+                         filteredHistory.map(h => (
+                            <tr key={h.id} className="hover:bg-gray-50 transition-colors">
+                                <td className="pl-6 py-4 font-mono text-xs text-text-secondary">
+                                    {new Date(h.order_date).toLocaleDateString()}
+                                </td>
+                                <td className="py-4">
+                                    <div className="font-medium text-text-primary">{h.supplier_name}</div>
+                                    <Link href={`/purchases/${h.id}`} className="text-[10px] text-primary hover:underline font-mono">#{h.id.substring(0,8)}</Link>
+                                </td>
+                                <td className="py-4 text-right font-bold text-primary">{formatRupiah(h.total_amount)}</td>
+                                <td className="py-4 text-center flex justify-center"><StatusBadge status={h.payment_status} /></td>
+                                <td className="py-4 text-right pr-6">
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => handleEdit(h)} className="p-1.5 text-text-secondary hover:text-primary hover:bg-blue-50 rounded-lg transition-colors" title="Edit PO"><Edit2 className="w-4 h-4" /></button>
+                                        <button onClick={() => handleDelete(h)} className="p-1.5 text-text-secondary hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Hapus PO"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr><td colSpan="6" className="p-8 text-center text-text-secondary animate-pulse">Loading History...</td></tr>
-                            ) : history.map(h => (
-                                <tr key={h.id}>
-                                    <td className="pl-6 font-mono text-xs text-text-secondary">{new Date(h.order_date).toLocaleDateString()}</td>
-                                    <td className="text-text-primary font-medium">
-                                        {h.supplier_name}
-                                        <span className="block text-[10px] text-text-secondary">{h.po_number || 'ID:'+h.id.substr(0,8)}</span>
-                                    </td>
-                                    <td className="text-right font-bold text-lumina-gold">{formatRupiah(h.total_amount)}</td>
-                                    <td className="text-center">
-                                        <span className={`badge-luxury ${h.fulfillment_status === 'RECEIVED' ? 'badge-success' : 'bg-blue-900 text-blue-200'}`}>
-                                            {h.fulfillment_status || 'OPEN'}
-                                        </span>
-                                    </td>
-                                    <td className="text-center">
-                                        <span className={`badge-luxury ${h.payment_status === 'PAID' ? 'badge-success' : h.payment_status === 'PARTIAL_PAID' ? 'bg-amber-900 text-amber-200' : 'bg-rose-900 text-rose-200'}`}>
-                                            {h.payment_status || 'UNPAID'}
-                                        </span>
-                                    </td>
-                                    <td className="text-right pr-6">
-                                        <Link href={`/purchases/${h.id}`} className="text-xs font-bold text-lumina-gold hover:underline">
-                                            Manage &rarr;
-                                        </Link>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                        ))}
+                    </tbody>
+                </table>
             </div>
 
+            {/* --- MODAL DEV PAY ALL --- */}
             <Portal>
-                {/* Modal Create PO */}
+                {isDevPayModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+                        <motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-border p-6">
+                            <div className="flex items-center gap-3 mb-4 text-amber-600">
+                                <Zap className="w-6 h-6"/>
+                                <h3 className="font-bold text-lg">Dev Batch Payment</h3>
+                            </div>
+                            <p className="text-sm text-text-secondary mb-4">
+                                Fitur ini akan mengubah semua status <b>UNPAID</b> menjadi <b>PAID</b> dan memotong saldo akun yang dipilih.
+                            </p>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-text-secondary block mb-1">Sumber Dana (Wallet)</label>
+                                    <select 
+                                        className="input-luxury" 
+                                        value={devWalletId} 
+                                        onChange={e => setDevWalletId(e.target.value)}
+                                    >
+                                        <option value="">-- Pilih Akun --</option>
+                                        {wallets.map(w => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="flex justify-end gap-2 pt-2">
+                                    <button onClick={() => setIsDevPayModalOpen(false)} className="btn-ghost-dark text-xs">Batal</button>
+                                    <button onClick={executeDevPayAll} className="btn-gold text-xs px-4 shadow-md">Execute Batch</button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </Portal>
+
+            {/* --- MODAL FORM (CREATE / EDIT) --- */}
+            <Portal>
                 {modalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface/80 backdrop-blur-sm p-4">
-                        <div className="card-luxury w-full max-w-4xl p-6 fade-in-up max-h-[90vh] overflow-y-auto flex flex-col">
-                            <div className="flex justify-between items-center mb-4">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+                        <motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-border flex flex-col max-h-[90vh]">
+                            <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-gray-50 rounded-t-2xl">
                                 <h3 className="text-lg font-bold text-text-primary">
-                                    {globalCart.length > 0 && cart.length > 0 ? "Finalize Draft PO" : "Create New Purchase Order"}
+                                    {formData.id ? 'Edit Purchase Order' : 'New Purchase Order'}
                                 </h3>
-                                <button onClick={() => setModalOpen(false)} className="text-2xl text-text-secondary hover:text-text-primary">×</button>
+                                <button onClick={() => setModalOpen(false)} className="bg-white p-1.5 rounded-lg border border-border text-text-secondary hover:text-rose-500"><X className="w-5 h-5"/></button>
                             </div>
                             
-                            {/* Alert jika load dari draft */}
-                            {globalCart.length > 0 && cart.length > 0 && (
-                                <div className="mb-4 bg-blue-900/30 border border-blue-800 text-blue-200 text-xs p-3 rounded-lg flex items-center gap-2">
-                                    <span>ℹ️</span>
-                                    <span>Data dimuat dari Inventory Draft. Silakan lengkapi Supplier, Gudang, dan harga beli (Cost).</span>
+                            {formData.id && (
+                                <div className="bg-amber-50 px-6 py-3 border-b border-amber-100 flex gap-2 items-center text-xs text-amber-800">
+                                    <AlertTriangle className="w-4 h-4"/>
+                                    <span><b>Mode Edit:</b> Saldo dan stok akan dikoreksi otomatis.</span>
                                 </div>
                             )}
                             
-                            <form onSubmit={submitPO} className="space-y-4 flex-1 overflow-y-auto">
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                                {/* Header Info */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-text-secondary mb-1">Supplier</label>
-                                        <select required className="input-luxury" value={formData.supplier_id} onChange={e => setFormData({...formData, supplier_id: e.target.value})}>
-                                            <option value="">-- Select --</option>
-                                            {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                        </select>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-text-secondary uppercase">Supplier</label>
+                                        <div className="relative"><Building className="absolute left-3 top-3 w-4 h-4 text-gray-400"/><select className="input-luxury pl-10" value={formData.supplier_id} onChange={e => setFormData({...formData, supplier_id: e.target.value})}><option value="">-- Select --</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-text-secondary mb-1">Target Warehouse</label>
-                                        <select required className="input-luxury" value={formData.warehouse_id} onChange={e => setFormData({...formData, warehouse_id: e.target.value})}>
-                                            <option value="">-- Select --</option>
-                                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                        </select>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-text-secondary uppercase">Warehouse</label>
+                                        <div className="relative"><Truck className="absolute left-3 top-3 w-4 h-4 text-gray-400"/><select className="input-luxury pl-10" value={formData.warehouse_id} onChange={e => setFormData({...formData, warehouse_id: e.target.value})}><option value="">-- Select --</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}</select></div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-text-secondary mb-1">Order Date</label>
-                                        <input type="date" required className="input-luxury" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-text-secondary uppercase">Order Date</label>
+                                        <input type="date" className="input-luxury" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
                                     </div>
                                 </div>
-                                
-                                {/* Manual Add Item (Jika ingin tambah barang lain selain dari draft) */}
-                                <div className="bg-background p-4 rounded-xl border border-lumina-border">
-                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                                        <div className="sm:col-span-6">
-                                            <label className="text-xs font-bold text-text-secondary mb-1 block">Add More Items</label>
-                                            <select className="input-luxury w-full" value={inputItem.variant_id} onChange={e => { const v = variants.find(x=>x.id===e.target.value); setInputItem({...inputItem, variant_id: e.target.value, cost: v?.cost || ''}) }}>
-                                                <option value="">Select Variant...</option>
-                                                {variants.map(v => { const p = products.find(x=>x.id===v.product_id); return <option key={v.id} value={v.id}>{v.sku} - {p?.name} ({v.color}/{v.size})</option> })}
-                                            </select>
+
+                                {/* Item Input */}
+                                <div className="bg-gray-50 p-4 rounded-xl border border-border space-y-3">
+                                    <div className="grid grid-cols-12 gap-3">
+                                        <div className="col-span-12 md:col-span-6">
+                                            <label className="text-xs font-bold text-text-secondary block mb-1">Product Variant</label>
+                                            <select className="input-luxury" value={inputItem.variant_id} onChange={e => { const v = variants.find(x=>x.id===e.target.value); setInputItem({...inputItem, variant_id: e.target.value, cost: v?.cost || ''}) }}><option value="">Search Item...</option>{variants.map(v => { const p = products.find(x=>x.id===v.product_id); return <option key={v.id} value={v.id}>{p?.name} ({v.color}/{v.size})</option> })}</select>
                                         </div>
-                                        <div className="sm:col-span-2">
-                                            <label className="text-xs font-bold text-text-secondary mb-1 block">Qty</label>
-                                            <input type="number" className="input-luxury w-full" placeholder="0" value={inputItem.qty} onChange={e=>setInputItem({...inputItem, qty:e.target.value})} />
+                                        <div className="col-span-6 md:col-span-2">
+                                            <label className="text-xs font-bold text-text-secondary block mb-1">Qty</label>
+                                            <input type="number" className="input-luxury" placeholder="0" value={inputItem.qty} onChange={e=>setInputItem({...inputItem, qty:e.target.value})} />
                                         </div>
-                                        <div className="sm:col-span-3">
-                                            <label className="text-xs font-bold text-text-secondary mb-1 block">Cost (IDR)</label>
-                                            <input type="number" className="input-luxury w-full" placeholder="0" value={inputItem.cost} onChange={e=>setInputItem({...inputItem, cost:e.target.value})} />
+                                        <div className="col-span-6 md:col-span-3">
+                                            <label className="text-xs font-bold text-text-secondary block mb-1">Cost (HPP)</label>
+                                            <input type="number" className="input-luxury" placeholder="Rp" value={inputItem.cost} onChange={e=>setInputItem({...inputItem, cost:e.target.value})} />
                                         </div>
-                                        <div className="sm:col-span-1">
-                                            <button type="button" onClick={addItem} className="btn-gold w-full p-2.5 mt-2 sm:mt-0">+</button>
+                                        <div className="col-span-12 md:col-span-1 flex items-end">
+                                            <button type="button" onClick={addItem} className="btn-gold w-full h-10 flex items-center justify-center rounded-xl"><Plus className="w-5 h-5"/></button>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Cart Preview */}
-                                <div className="border border-lumina-border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
-                                    <table className="w-full text-sm text-left text-text-primary min-w-[400px]">
-                                        <thead className="bg-surface text-xs text-text-secondary uppercase sticky top-0">
-                                            <tr><th className="p-3">Item</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Cost</th><th className="p-3 text-right">Total</th><th className="p-3"></th></tr>
+                                {/* Cart List */}
+                                <div className="border border-border rounded-xl overflow-hidden">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-50 text-xs font-bold text-text-secondary uppercase">
+                                            <tr><th className="p-3">Item</th><th className="p-3 text-right">Qty</th><th className="p-3 text-right">Subtotal</th><th className="p-3 w-10"></th></tr>
                                         </thead>
-                                        <tbody className="divide-y divide-lumina-border">
-                                            {cart.length === 0 ? (
-                                                <tr><td colSpan="5" className="p-4 text-center text-text-secondary text-xs italic">No items added yet.</td></tr>
-                                            ) : cart.map((c, idx) => (
-                                                <tr key={idx} className="group hover:bg-white/5">
-                                                    <td className="p-3">
-                                                        <div className="font-medium">{c.name}</div>
-                                                        <div className="text-xs text-text-secondary">{c.sku} ({c.spec})</div>
-                                                    </td>
-                                                    <td className="p-3 text-right">
-                                                        {/* Editable Qty in Cart */}
-                                                        <input 
-                                                            type="number" 
-                                                            className="bg-transparent text-right border-b border-white/20 w-16 focus:border-lumina-gold focus:outline-none"
-                                                            value={c.qty}
-                                                            onChange={(e) => {
-                                                                const newCart = [...cart];
-                                                                newCart[idx].qty = parseInt(e.target.value) || 0;
-                                                                setCart(newCart);
-                                                            }}
-                                                        />
-                                                    </td>
-                                                    <td className="p-3 text-right">
-                                                        {/* Editable Cost in Cart */}
-                                                        <input 
-                                                            type="number" 
-                                                            className="bg-transparent text-right border-b border-white/20 w-24 focus:border-lumina-gold focus:outline-none"
-                                                            value={c.unit_cost}
-                                                            onChange={(e) => {
-                                                                const newCart = [...cart];
-                                                                newCart[idx].unit_cost = parseInt(e.target.value) || 0;
-                                                                setCart(newCart);
-                                                            }}
-                                                        />
-                                                    </td>
-                                                    <td className="p-3 text-right font-mono">{formatRupiah(c.qty*c.unit_cost)}</td>
-                                                    <td className="p-3 text-right">
-                                                        <button type="button" onClick={() => removeItem(idx)} className="text-rose-500 hover:text-rose-400 font-bold text-xs opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
-                                                    </td>
+                                        <tbody className="divide-y divide-border/60">
+                                            {cart.map((c, idx) => (
+                                                <tr key={idx}>
+                                                    <td className="p-3"><div className="font-bold text-text-primary">{c.name}</div><div className="text-xs text-text-secondary">{c.spec}</div></td>
+                                                    <td className="p-3 text-right font-mono">{c.qty}</td>
+                                                    <td className="p-3 text-right font-mono font-bold">{formatRupiah(c.qty*c.unit_cost)}</td>
+                                                    <td className="p-3 text-center"><button onClick={() => removeItem(idx)} className="text-rose-400 hover:text-rose-600"><X className="w-4 h-4"/></button></td>
                                                 </tr>
                                             ))}
+                                            {cart.length===0 && <tr><td colSpan="4" className="p-6 text-center text-text-secondary italic">Keranjang kosong</td></tr>}
                                         </tbody>
-                                        <tfoot className="bg-surface font-bold text-sm">
-                                            <tr>
-                                                <td colSpan="3" className="p-3 text-right">Estimated Total</td>
-                                                <td className="p-3 text-right text-lumina-gold">
-                                                    {formatRupiah(cart.reduce((a,b)=>a+(b.qty*b.unit_cost),0))}
-                                                </td>
-                                                <td></td>
-                                            </tr>
-                                        </tfoot>
+                                        {cart.length > 0 && (
+                                            <tfoot className="bg-gray-50 font-bold">
+                                                <tr>
+                                                    <td colSpan="2" className="p-3 text-right">TOTAL</td>
+                                                    <td className="p-3 text-right text-lg">{formatRupiah(cart.reduce((a,b) => a + (b.qty * b.unit_cost), 0))}</td>
+                                                    <td></td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
                                     </table>
                                 </div>
 
-                                <div>
-                                    <label className="block text-xs font-bold text-text-secondary mb-1">Notes</label>
-                                    <input className="input-luxury" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Shipping instruction..." />
+                                {/* Payment Checkbox with Wallet Selection */}
+                                <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-3">
+                                    <div className="flex items-center gap-3">
+                                        <input type="checkbox" id="isPaid" checked={formData.isPaid} onChange={e => setFormData({...formData, isPaid: e.target.checked})} className="w-5 h-5 accent-blue-600 rounded cursor-pointer" />
+                                        <label htmlFor="isPaid" className="text-sm font-bold text-blue-900 cursor-pointer select-none">Lunas Sekarang (Paid)</label>
+                                    </div>
+                                    
+                                    {formData.isPaid && (
+                                        <div className="ml-8 animate-fade-in">
+                                            <label className="text-xs font-bold text-text-secondary uppercase block mb-1.5">Bayar Menggunakan Akun:</label>
+                                            <div className="relative">
+                                                <Wallet className="absolute left-3 top-3 w-4 h-4 text-gray-400"/>
+                                                <select 
+                                                    className="input-luxury pl-10 bg-white" 
+                                                    value={formData.wallet_id} 
+                                                    onChange={e => setFormData({...formData, wallet_id: e.target.value})}
+                                                >
+                                                    <option value="">-- Pilih Kas / Bank --</option>
+                                                    {wallets.map(w => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1"><ArrowRight className="w-3 h-3"/> Saldo akan dipotong otomatis.</p>
+                                        </div>
+                                    )}
                                 </div>
+                            </div>
 
-                                <div className="flex justify-end gap-3 pt-4 border-t border-lumina-border">
-                                    <button type="button" onClick={() => setModalOpen(false)} className="btn-ghost-dark">Cancel</button>
-                                    <button type="submit" className="btn-gold">Create Order</button>
-                                </div>
-                            </form>
-                        </div>
+                            <div className="p-6 border-t border-border bg-gray-50 rounded-b-2xl flex justify-end gap-3">
+                                <button type="button" onClick={() => setModalOpen(false)} className="btn-ghost-dark">Cancel</button>
+                                <button type="submit" onClick={submitPO} className="btn-gold px-8 shadow-lg">
+                                    {formData.id ? 'Update PO' : 'Submit Order'}
+                                </button>
+                            </div>
+                        </motion.div>
                     </div>
                 )}
             </Portal>

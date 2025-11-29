@@ -60,9 +60,9 @@ export default function CashTransactionsTable({ transactions, loading, fetchData
                 </h3>
                 <button 
                     onClick={fetchData} 
-                    className="text-[10px] font-bold text-text-secondary hover:text-primary flex items-center gap-1 bg-gray-50 hover:bg-white border border-border px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
+                    className="text-[12px] font-bold text-text-secondary hover:text-primary flex items-center gap-1 bg-gray-50 hover:bg-white border border-border px-3 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
                 >
-                    <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                     Refresh
                 </button>
             </div>
