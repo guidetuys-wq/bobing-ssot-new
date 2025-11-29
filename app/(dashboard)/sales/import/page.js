@@ -1,7 +1,8 @@
+// app/(dashboard)/sales/import/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db, auth } from '@/lib/firebase';
-import { collection, getDocs, doc, writeBatch, serverTimestamp, query, orderBy, increment, addDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, writeBatch, serverTimestamp, query, orderBy, increment, addDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
@@ -17,6 +18,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// --- INTEGRASI FINANCE SSOT ---
+import { recordSalesTransaction } from '@/lib/transactionService';
+
 // Cache Keys
 const CACHE_KEY_VARIANTS = 'lumina_variants_v2';
 const CACHE_KEY_PRODUCTS_BASE = 'lumina_products_base_v2';
@@ -27,6 +31,7 @@ export default function ImportSalesPage() {
     // --- STATE CONFIG & DATA ---
     const [warehouses, setWarehouses] = useState([]);
     const [accounts, setAccounts] = useState([]); 
+    const [financeConfig, setFinanceConfig] = useState(null); 
     const [config, setConfig] = useState({ warehouse_id: '', account_id: '' });
     
     // --- STATE PROCESS ---
@@ -46,25 +51,61 @@ export default function ImportSalesPage() {
         const init = async () => {
             if (typeof window === 'undefined') return;
 
-            const [whSnap, accSnap] = await Promise.all([
-                getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
-                getDocs(query(collection(db, "chart_of_accounts"), orderBy("code")))
-            ]);
+            try {
+                const [whSnap, accSnap, settingSnap] = await Promise.all([
+                    getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
+                    getDocs(query(collection(db, "chart_of_accounts"), orderBy("code"))),
+                    getDoc(doc(db, "settings", "general")) 
+                ]);
 
-            const whList = []; 
-            whSnap.forEach(d => { if(d.data().type !== 'virtual_supplier') whList.push({id:d.id, ...d.data()}) });
-            setWarehouses(whList);
+                const whList = []; 
+                whSnap.forEach(d => { if(d.data().type !== 'virtual_supplier') whList.push({id:d.id, ...d.data()}) });
+                setWarehouses(whList);
 
-            const accList = []; 
-            accSnap.forEach(d => { 
-                const c = (d.data().category || '').toLowerCase();
-                if(c.includes('piutang') || c.includes('receivable') || c.includes('aset')) accList.push({id:d.id, ...d.data()});
-            });
-            setAccounts(accList);
-            
-            const defWh = whList.find(w => w.name.toLowerCase().includes('utama')) || whList[0];
-            const defAcc = accList.find(a => a.name.toLowerCase().includes('piutang usaha')) || accList[0];
-            setConfig({ warehouse_id: defWh ? defWh.id : '', account_id: defAcc ? defAcc.id : '' });
+                const accList = []; 
+                accSnap.forEach(d => { 
+                    const c = (d.data().category || '').toLowerCase();
+                    const code = String(d.data().code);
+                    // Filter: Hanya Aset Lancar (1xxx) untuk menampung Piutang
+                    if(code.startsWith('1')) {
+                        accList.push({id:d.id, ...d.data()});
+                    }
+                });
+                setAccounts(accList);
+                
+                // [FIXED] LOGIKA PENENTUAN AKUN DEFAULT (DINAMIS SSOT)
+                let loadedConfig = null;
+                let defaultAccId = '';
+
+                if (settingSnap.exists()) {
+                    loadedConfig = settingSnap.data().financeConfig;
+                    setFinanceConfig(loadedConfig);
+                    
+                    // 1. Prioritas Utama: Ambil dari Finance Mapping (Receivable)
+                    if (loadedConfig?.defaultReceivableId) {
+                        const exist = accList.find(a => a.id === loadedConfig.defaultReceivableId);
+                        if (exist) defaultAccId = exist.id;
+                    }
+                }
+
+                // 2. Fallback: Cari manual jika config kosong
+                if (!defaultAccId) {
+                    const fallback = accList.find(a => a.name.toLowerCase().includes('piutang') || a.name.toLowerCase().includes('receivable'));
+                    defaultAccId = fallback ? fallback.id : (accList[0]?.id || '');
+                }
+
+                // Default Warehouse
+                const defWh = whList.find(w => w.name.toLowerCase().includes('utama')) || whList[0];
+                
+                setConfig({ 
+                    warehouse_id: defWh ? defWh.id : '', 
+                    account_id: defaultAccId // Menggunakan ID dinamis dari Settings
+                });
+
+            } catch (e) {
+                console.error("Init Error:", e);
+                toast.error("Gagal memuat konfigurasi awal.");
+            }
         };
         init();
     }, []);
@@ -336,10 +377,14 @@ export default function ImportSalesPage() {
         }
     };
 
+    // --- COMMIT LOGIC (AUTO JOURNAL SSOT) ---
     const handleCommit = async () => {
         if(validationIssues.some(i => i.severity === 'error')) return toast.error("Perbaiki ERROR sebelum menyimpan!");
         if(validationIssues.some(i => i.severity === 'warning') && !confirm("Ada Warning (Kuning). Lanjut simpan?")) return;
         
+        // Safety Check
+        if (!config.account_id) return toast.error("Pilih Akun Piutang/Marketplace dulu!");
+
         setProcessing(true);
         try {
             let batch = writeBatch(db);
@@ -384,7 +429,9 @@ export default function ImportSalesPage() {
                     },
                     status: statusRaw,
                     status_internal: ['selesai', 'completed', 'delivered'].some(s => statusRaw.includes(s)) ? 'completed' : 'processing',
-                    payment_status: 'unpaid', payment_account_id: config.account_id,
+                    // Import biasanya dianggap PAID (Masuk ke Piutang Marketplace dulu)
+                    payment_status: 'paid', 
+                    payment_account_id: config.account_id,
                     order_created_at: head['tanggal pesanan'] ? new Date(head['tanggal pesanan']) : serverTimestamp(),
                     marketplace_created_at: head['tanggal pesanan'] ? new Date(head['tanggal pesanan']) : null,
                     imported_at: serverTimestamp(),
@@ -410,12 +457,32 @@ export default function ImportSalesPage() {
                         opCount++;
                     }
                 }
+
+                // [NEW SSOT] RECORD FINANCE TRANSACTION
+                // Menggunakan config.account_id yang sudah otomatis terisi dari Settings
+                if (financeConfig && config.account_id) {
+                    recordSalesTransaction(db, batch, {
+                        orderId: orderPayload.order_number,
+                        totalRevenue: financial.netPayout, // Masuk ke Debit Piutang
+                        totalCost: financial.totalHPP,
+                        walletId: config.account_id, 
+                        financeConfig: financeConfig,
+                        userEmail: user?.email
+                    });
+                }
+
                 if(opCount >= 400) { await batch.commit(); batch = writeBatch(db); opCount = 0; }
             }
             if(opCount > 0) await batch.commit();
             
+            // Invalidate Cache
             localStorage.removeItem('lumina_inventory_v2'); 
-            toast.success("Import Selesai! Data Estimasi Piutang tersimpan.");
+            localStorage.removeItem('lumina_dash_master_v4'); 
+            localStorage.removeItem('lumina_sales_history_v2'); 
+            localStorage.removeItem('lumina_balance_v2');
+            localStorage.removeItem('lumina_cash_transactions_v2');
+
+            toast.success("Import Selesai! Data Stok & Keuangan (Jurnal) Tersimpan.");
             setStep(1); setPreviewData(null); setValidationIssues([]); setProcessing(false); setRawFile(null);
 
         } catch(e) { toast.error("Gagal post: " + e.message); setProcessing(false); }
@@ -491,7 +558,7 @@ export default function ImportSalesPage() {
                     {/* Account Config */}
                     <div className="flex-1">
                         <label className="text-xs font-bold text-text-secondary uppercase mb-2 flex items-center gap-2">
-                            <CreditCard className="w-4 h-4"/> Akun Piutang
+                            <CreditCard className="w-4 h-4"/> Akun Piutang Marketplace
                         </label>
                         <div className="relative">
                             <select 
@@ -505,6 +572,12 @@ export default function ImportSalesPage() {
                             </select>
                             <div className="absolute right-3 top-3 pointer-events-none text-text-secondary"><ArrowRight className="w-4 h-4 rotate-90"/></div>
                         </div>
+                        {/* Hint Dinamis */}
+                        {financeConfig?.defaultReceivableId && config.account_id === financeConfig.defaultReceivableId && (
+                            <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3"/> Terpilih otomatis sesuai Settings
+                            </p>
+                        )}
                     </div>
                 </div>
             </div>

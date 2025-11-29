@@ -1,13 +1,17 @@
+// app/(dashboard)/catalog/variants/page.js
 "use client";
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, where, limit } from 'firebase/firestore';
-import { sortBySize, formatRupiah } from '@/lib/utils';
+import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, limit } from 'firebase/firestore';
+import { formatRupiah } from '@/lib/utils';
 import { Portal } from '@/lib/usePortal';
 import toast from 'react-hot-toast';
 import PageHeader from '@/components/PageHeader';
 
-import { Search, Plus, Filter, Edit, Wand2, Box, Tag, Ruler } from 'lucide-react';
+import { 
+    Search, Plus, Tag, Ruler, Box, Wand2, 
+    AlertTriangle, Check, X, Edit2, Loader2 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CACHE_KEY_VARIANTS = 'lumina_variants_v2';
@@ -18,12 +22,30 @@ export default function VariantsPage() {
     const [variants, setVariants] = useState([]);
     const [products, setProducts] = useState([]); 
     const [loading, setLoading] = useState(true);
+    
+    // Modal State
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
+    
+    // Search State
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedBaseSku, setSelectedBaseSku] = useState('-');
 
+    // --- QUICK EDIT STATE ---
+    const [quickEditId, setQuickEditId] = useState(null);
+    const [quickCostVal, setQuickCostVal] = useState('');
+    const [savingCost, setSavingCost] = useState(false);
+
     useEffect(() => { fetchData(); }, []);
+
+    const invalidateRelatedCaches = () => {
+        if (typeof window === 'undefined') return;
+        localStorage.removeItem(CACHE_KEY_VARIANTS);
+        localStorage.removeItem('lumina_inventory_v2'); 
+        localStorage.removeItem('lumina_products_variants_v2');
+        // Penting: Hapus cache dashboard agar profit terupdate
+        localStorage.removeItem('lumina_dash_master_v4');
+    };
 
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
@@ -51,7 +73,7 @@ export default function VariantsPage() {
             else promises.push(getDocs(query(collection(db, "products"), orderBy("name"))));
 
             if (cachedVariants) setVariants(cachedVariants);
-            else promises.push(getDocs(query(collection(db, "product_variants"), orderBy("sku"), limit(100))));
+            else promises.push(getDocs(query(collection(db, "product_variants"), orderBy("sku"), limit(200)))); // Limit dinaikkan
 
             if (promises.length > 0) {
                 const results = await Promise.all(promises);
@@ -94,6 +116,42 @@ export default function VariantsPage() {
         }
     };
 
+    // --- QUICK EDIT HANDLER ---
+    const startQuickEdit = (v) => {
+        setQuickEditId(v.id);
+        setQuickCostVal(v.cost || 0);
+    };
+
+    const cancelQuickEdit = () => {
+        setQuickEditId(null);
+        setSavingCost(false);
+    };
+
+    const saveQuickCost = async (variantId) => {
+        const newCost = parseFloat(quickCostVal);
+        if (isNaN(newCost) || newCost < 0) return toast.error("Nilai HPP tidak valid");
+        
+        setSavingCost(true);
+        try {
+            await updateDoc(doc(db, "product_variants", variantId), {
+                cost: newCost,
+                updated_at: serverTimestamp()
+            });
+
+            // Optimistic Update (Update state lokal langsung)
+            setVariants(prev => prev.map(v => v.id === variantId ? { ...v, cost: newCost } : v));
+            invalidateRelatedCaches();
+            
+            toast.success("HPP Updated!");
+            setQuickEditId(null);
+        } catch(e) {
+            console.error(e);
+            toast.error("Gagal update HPP");
+        } finally {
+            setSavingCost(false);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         const toastId = toast.loading("Menyimpan SKU...");
@@ -106,11 +164,7 @@ export default function VariantsPage() {
             if(formData.id) await updateDoc(doc(db,"product_variants",formData.id), pl); 
             else { pl.created_at=serverTimestamp(); await addDoc(collection(db,"product_variants"), pl); }
             
-            if (typeof window !== 'undefined') {
-                localStorage.removeItem(CACHE_KEY_VARIANTS);
-                localStorage.removeItem('lumina_inventory_v2'); 
-                localStorage.removeItem('lumina_products_variants_v2');
-            }
+            invalidateRelatedCaches();
 
             setModalOpen(false); 
             toast.success("Berhasil disimpan!", { id: toastId });
@@ -126,8 +180,8 @@ export default function VariantsPage() {
     return (
         <div className="max-w-full mx-auto space-y-6 fade-in pb-20 text-text-primary bg-background min-h-screen">
             <PageHeader 
-                title="Master SKU (Variant)" 
-                subtitle="Database semua varian produk (Warna, Ukuran, Harga)."
+                title="Master SKU & Costing" 
+                subtitle="Database varian produk. Pastikan HPP terisi untuk laporan Laba Rugi yang akurat."
                 actions={
                     <div className="flex gap-3 items-center">
                         <div className="relative w-64 group">
@@ -150,48 +204,103 @@ export default function VariantsPage() {
             />
 
             <div className="bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto min-h-[500px]">
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-50/80 sticky top-0 z-10 text-[11px] font-bold text-text-secondary uppercase tracking-wider backdrop-blur-sm border-b border-border">
                             <tr>
                                 <th className="pl-6 py-4">SKU Code</th>
                                 <th className="py-4">Parent Product</th>
-                                <th className="py-4">Spec (Color/Size)</th>
+                                <th className="py-4">Spec</th>
+                                <th className="py-4 w-48">HPP (Modal) <span className="text-rose-500">*</span></th>
                                 <th className="py-4 text-right">Sell Price</th>
+                                <th className="py-4 text-center">Margin</th>
                                 <th className="py-4 text-right pr-6">Action</th>
                             </tr>
                         </thead>
                         <tbody className="text-sm text-text-primary divide-y divide-border/60">
                             {loading ? (
-                                <tr><td colSpan="5" className="p-12 text-center text-text-secondary animate-pulse">Loading variants...</td></tr>
+                                <tr><td colSpan="7" className="p-12 text-center text-text-secondary animate-pulse">Loading variants...</td></tr>
                             ) : filteredVariants.length === 0 ? (
-                                <tr><td colSpan="5" className="p-12 text-center text-text-secondary">No variants found.</td></tr>
+                                <tr><td colSpan="7" className="p-12 text-center text-text-secondary">No variants found.</td></tr>
                             ) : (
-                                filteredVariants.map(v=>(
-                                    <tr key={v.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="pl-6 py-3 font-mono text-primary font-bold text-xs">{v.sku}</td>
-                                        <td className="py-3 text-text-primary text-sm">{products.find(p=>p.id===v.product_id)?.name || '-'}</td>
-                                        <td className="py-3">
-                                            <div className="flex gap-2">
-                                                <span className="text-[10px] bg-gray-100 text-text-secondary px-2 py-0.5 rounded border border-border flex items-center gap-1"><Tag className="w-3 h-3"/> {v.color}</span>
-                                                <span className="text-[10px] bg-gray-100 text-text-secondary px-2 py-0.5 rounded border border-border flex items-center gap-1"><Ruler className="w-3 h-3"/> {v.size}</span>
-                                            </div>
-                                        </td>
-                                        <td className="py-3 text-right font-bold text-text-primary font-mono">{formatRupiah(v.price)}</td>
-                                        <td className="py-3 text-right pr-6">
-                                            <button onClick={()=>{setFormData({...v}); const p = products.find(x=>x.id===v.product_id); setSelectedBaseSku(p?p.base_sku:'-'); setModalOpen(true);}} className="text-xs font-bold text-text-secondary hover:text-primary bg-white border border-border px-3 py-1.5 rounded-lg transition-colors shadow-sm">
-                                                Edit
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
+                                filteredVariants.map(v => {
+                                    const cost = v.cost || 0;
+                                    const price = v.price || 0;
+                                    const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
+                                    const isEditing = quickEditId === v.id;
+
+                                    return (
+                                        <tr key={v.id} className="hover:bg-gray-50 transition-colors group">
+                                            <td className="pl-6 py-3 font-mono text-primary font-bold text-xs">{v.sku}</td>
+                                            <td className="py-3 text-text-primary text-sm">{products.find(p=>p.id===v.product_id)?.name || '-'}</td>
+                                            <td className="py-3">
+                                                <div className="flex gap-2">
+                                                    <span className="text-[10px] bg-gray-100 text-text-secondary px-2 py-0.5 rounded border border-border flex items-center gap-1"><Tag className="w-3 h-3"/> {v.color}</span>
+                                                    <span className="text-[10px] bg-gray-100 text-text-secondary px-2 py-0.5 rounded border border-border flex items-center gap-1"><Ruler className="w-3 h-3"/> {v.size}</span>
+                                                </div>
+                                            </td>
+                                            
+                                            {/* --- QUICK EDIT HPP COLUMN --- */}
+                                            <td className="py-3">
+                                                {isEditing ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="relative">
+                                                            <span className="absolute left-2 top-1.5 text-xs text-text-secondary">Rp</span>
+                                                            <input 
+                                                                autoFocus
+                                                                type="number" 
+                                                                className="w-28 pl-7 pr-2 py-1 text-sm border border-primary rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono font-bold"
+                                                                value={quickCostVal}
+                                                                onChange={e => setQuickCostVal(e.target.value)}
+                                                                onKeyDown={e => { if(e.key === 'Enter') saveQuickCost(v.id); else if(e.key === 'Escape') cancelQuickEdit(); }}
+                                                            />
+                                                        </div>
+                                                        <button onClick={() => saveQuickCost(v.id)} disabled={savingCost} className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 border border-emerald-200">
+                                                            {savingCost ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Check className="w-3.5 h-3.5"/>}
+                                                        </button>
+                                                        <button onClick={cancelQuickEdit} className="p-1.5 bg-gray-50 text-gray-500 rounded-lg hover:bg-gray-100 border border-border">
+                                                            <X className="w-3.5 h-3.5"/>
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 group/edit cursor-pointer" onClick={() => startQuickEdit(v)}>
+                                                        <span className={`font-mono font-bold text-sm ${cost === 0 ? 'text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100' : 'text-text-secondary'}`}>
+                                                            {formatRupiah(cost)}
+                                                        </span>
+                                                        {cost === 0 && <AlertTriangle className="w-4 h-4 text-rose-500 animate-pulse" />}
+                                                        <Edit2 className="w-3 h-3 text-gray-300 group-hover/edit:text-primary transition-colors opacity-0 group-hover/edit:opacity-100"/>
+                                                    </div>
+                                                )}
+                                            </td>
+
+                                            <td className="py-3 text-right font-bold text-text-primary font-mono">{formatRupiah(price)}</td>
+                                            
+                                            {/* --- MARGIN COLUMN --- */}
+                                            <td className="py-3 text-center">
+                                                <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
+                                                    cost === 0 ? 'bg-gray-100 text-gray-400 border-gray-200' : 
+                                                    margin < 10 ? 'bg-rose-50 text-rose-600 border-rose-100' : 
+                                                    'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                }`}>
+                                                    {cost === 0 ? 'N/A' : `${margin.toFixed(1)}%`}
+                                                </span>
+                                            </td>
+
+                                            <td className="py-3 text-right pr-6">
+                                                <button onClick={()=>{setFormData({...v}); const p = products.find(x=>x.id===v.product_id); setSelectedBaseSku(p?p.base_sku:'-'); setModalOpen(true);}} className="text-xs font-bold text-text-secondary hover:text-primary bg-white border border-border px-3 py-1.5 rounded-lg transition-colors shadow-sm">
+                                                    Full Edit
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    )
+                                })
                             )}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            {/* --- MODAL --- */}
+            {/* --- MODAL FULL EDIT --- */}
             <Portal>
             {modalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">

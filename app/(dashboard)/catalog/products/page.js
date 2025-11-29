@@ -1,3 +1,4 @@
+// app/(dashboard)/catalog/products/page.js
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { db, storage } from '@/lib/firebase';
@@ -12,21 +13,24 @@ import PageHeader from '@/components/PageHeader';
 // --- MODERN UI IMPORTS ---
 import { 
     Search, Plus, Filter, MoreHorizontal, Edit, Trash2, 
-    ChevronDown, ChevronRight, Image as ImageIcon, Box, Layers, Tag 
+    ChevronDown, ChevronRight, Image as ImageIcon, Box, Layers, Tag, Sparkles 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- KONFIGURASI CACHE ---
-const CACHE_KEY_MAIN = 'lumina_products_data_v2'; 
+const CACHE_KEY_MAIN = 'lumina_products_data_v3'; // Bump version for Collections
 const CACHE_KEY_VARIANTS = 'lumina_products_variants_v2'; 
 const CACHE_DURATION = 30 * 60 * 1000; 
 
 export default function ProductsPage() {
+    // Data States
     const [products, setProducts] = useState([]);
     const [brands, setBrands] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [collections, setCollections] = useState([]); // [NEW] State Collection
     const [loading, setLoading] = useState(true);
     
+    // UI States
     const [modalOpen, setModalOpen] = useState(false);
     const [formData, setFormData] = useState({});
     const [imageFile, setImageFile] = useState(null);
@@ -50,13 +54,15 @@ export default function ProductsPage() {
     const fetchData = async (forceRefresh = false) => {
         setLoading(true);
         try {
+            // Cek Cache
             if (!forceRefresh && typeof window !== 'undefined') {
                 const cached = localStorage.getItem(CACHE_KEY_MAIN);
                 if (cached) {
-                    const { brands, categories, products, timestamp } = JSON.parse(cached);
+                    const { brands, categories, collections, products, timestamp } = JSON.parse(cached);
                     if (Date.now() - timestamp < CACHE_DURATION) {
                         setBrands(brands);
                         setCategories(categories);
+                        setCollections(collections || []);
                         setProducts(products);
                         setLoading(false);
                         return;
@@ -64,30 +70,43 @@ export default function ProductsPage() {
                 }
             }
 
-            const [snapBrands, snapCats, snapProds] = await Promise.all([
+            // Fetch Live Data
+            const [snapBrands, snapCats, snapCols, snapProds] = await Promise.all([
                 getDocs(query(collection(db, "brands"), orderBy("name", "asc"))),
                 getDocs(query(collection(db, "categories"), orderBy("name", "asc"))),
-                getDocs(query(collection(db, "products"), limit(100))) 
+                getDocs(query(collection(db, "collections"), orderBy("name", "asc"))), // [NEW] Fetch Collections
+                getDocs(query(collection(db, "products"), limit(200))) 
             ]);
 
             const bs = []; snapBrands.forEach(d => bs.push({id:d.id, ...d.data()}));
             const cs = []; snapCats.forEach(d => cs.push({id:d.id, ...d.data()}));
+            const cls = []; snapCols.forEach(d => cls.push({id:d.id, ...d.data()}));
+            
             const ps = []; 
             snapProds.forEach(d => { 
                 const p=d.data(); 
                 const b=bs.find(x=>x.id===p.brand_id); 
-                ps.push({id:d.id, ...p, brand_name:b?b.name:''}); 
+                const c=cs.find(x=>x.id===p.category_id); // Match by ID now
+                const col=cls.find(x=>x.id===p.collection_id); // Match Collection
+                
+                ps.push({
+                    id:d.id, ...p, 
+                    brand_name: b ? b.name : '',
+                    category_name: c ? c.name : (p.category || ''), // Fallback to old string
+                    collection_name: col ? col.name : ''
+                }); 
             });
             
             const sortedProducts = ps.sort((a,b)=>(a.base_sku||'').localeCompare(b.base_sku||''));
 
             setBrands(bs);
             setCategories(cs);
+            setCollections(cls);
             setProducts(sortedProducts);
 
             if (typeof window !== 'undefined') {
                 localStorage.setItem(CACHE_KEY_MAIN, JSON.stringify({
-                    brands: bs, categories: cs, products: sortedProducts, timestamp: Date.now()
+                    brands: bs, categories: cs, collections: cls, products: sortedProducts, timestamp: Date.now()
                 }));
             }
 
@@ -134,8 +153,23 @@ export default function ProductsPage() {
 
     const openModal = (p=null) => {
         setImageFile(null); setUploading(false); if(fileInputRef.current) fileInputRef.current.value="";
-        if(p) { setFormData({...p}); setPreviewUrl(p.image_url||null); } 
-        else { setFormData({brand_id:'', name:'', base_sku:'', category:'', status:'active'}); setPreviewUrl(null); }
+        if(p) { 
+            // Map existing data
+            setFormData({
+                ...p,
+                category_id: p.category_id || (categories.find(c => c.name === p.category)?.id || ''), // Auto-match string to ID
+                collection_id: p.collection_id || ''
+            }); 
+            setPreviewUrl(p.image_url||null); 
+        } 
+        else { 
+            setFormData({
+                brand_id:'', name:'', base_sku:'', 
+                category_id:'', collection_id: '', // Default empty
+                status:'active'
+            }); 
+            setPreviewUrl(null); 
+        }
         setModalOpen(true);
     };
 
@@ -151,7 +185,13 @@ export default function ProductsPage() {
                     const sRef = ref(storage, `products/${Date.now()}.webp`);
                     await uploadBytes(sRef, blob); url = await getDownloadURL(sRef);
                 }
-                const pl = {...formData, image_url: url||'', updated_at: serverTimestamp()};
+                
+                const pl = {
+                    ...formData,
+                    category: categories.find(c=>c.id===formData.category_id)?.name || '', // Keep legacy string for backup
+                    image_url: url||'', 
+                    updated_at: serverTimestamp()
+                };
                 
                 if(formData.id) {
                     await updateDoc(doc(db,"products",formData.id), pl); 
@@ -184,7 +224,10 @@ export default function ProductsPage() {
         } 
     };
     
-    const filtered = products.filter(p=>p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.base_sku.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filtered = products.filter(p=>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        p.base_sku.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     return (
         <div className="max-w-full mx-auto space-y-6 fade-in pb-20 text-text-primary bg-background min-h-screen">
@@ -192,7 +235,7 @@ export default function ProductsPage() {
             {/* HEADER */}
             <PageHeader 
                 title="Master Produk" 
-                subtitle="Kelola katalog produk, varian, dan spesifikasi." 
+                subtitle="Kelola katalog produk, tagging koleksi, dan spesifikasi." 
                 actions={
                     <div className="flex gap-3 items-center">
                         <div className="relative w-64 md:w-80 group">
@@ -224,7 +267,7 @@ export default function ProductsPage() {
                                 <th className="py-4 pl-6 w-16">Image</th>
                                 <th className="py-4 px-4">Product Info</th>
                                 <th className="py-4 px-4">SKU Induk</th>
-                                <th className="py-4 px-4">Brand & Kategori</th>
+                                <th className="py-4 px-4">Kategori & Koleksi</th>
                                 <th className="py-4 px-4 text-center">Status</th>
                                 <th className="py-4 px-4 text-right pr-6">Action</th>
                             </tr>
@@ -259,9 +302,15 @@ export default function ProductsPage() {
                                                 <span className="font-mono text-xs font-bold text-text-secondary bg-gray-100 px-2 py-1 rounded border border-border">{p.base_sku}</span>
                                             </td>
                                             <td className="py-3 px-4">
-                                                <div className="flex flex-col gap-1">
-                                                    <div className="flex items-center gap-1 text-xs text-text-primary"><Tag className="w-3 h-3 text-text-secondary"/> {p.brand_name}</div>
-                                                    <div className="flex items-center gap-1 text-xs text-text-secondary"><Layers className="w-3 h-3"/> {p.category}</div>
+                                                <div className="flex flex-col gap-1.5">
+                                                    <div className="flex items-center gap-1 text-xs text-text-primary">
+                                                        <Layers className="w-3 h-3 text-text-secondary"/> {p.category_name || '-'}
+                                                    </div>
+                                                    {p.collection_name && (
+                                                        <div className="flex items-center gap-1 text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-100 w-fit">
+                                                            <Sparkles className="w-3 h-3"/> {p.collection_name}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="py-3 px-4 text-center">
@@ -376,18 +425,30 @@ export default function ProductsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-xs font-bold text-text-secondary block mb-1">Kategori</label>
-                                    <select className="input-luxury" value={formData.category} onChange={e=>setFormData({...formData, category:e.target.value})}>
+                                    <select className="input-luxury" value={formData.category_id} onChange={e=>setFormData({...formData, category_id:e.target.value})}>
                                         <option value="">-- Pilih --</option>
-                                        {categories.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
                                 </div>
+                                
+                                {/* NEW COLLECTION SELECTOR */}
                                 <div>
-                                    <label className="text-xs font-bold text-text-secondary block mb-1">Status</label>
-                                    <select className="input-luxury" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>
-                                        <option value="active">Active</option>
-                                        <option value="inactive">Inactive</option>
+                                    <label className="text-xs font-bold text-text-secondary block mb-1 flex items-center gap-1">
+                                        <Sparkles className="w-3 h-3 text-purple-500"/> Koleksi (Season)
+                                    </label>
+                                    <select className="input-luxury" value={formData.collection_id} onChange={e=>setFormData({...formData, collection_id:e.target.value})}>
+                                        <option value="">-- General --</option>
+                                        {collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="text-xs font-bold text-text-secondary block mb-1">Status</label>
+                                <select className="input-luxury" value={formData.status} onChange={e=>setFormData({...formData, status:e.target.value})}>
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
                             </div>
 
                             <div className="pt-4 border-t border-border flex justify-end gap-3">

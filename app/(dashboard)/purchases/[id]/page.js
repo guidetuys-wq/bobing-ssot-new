@@ -58,7 +58,10 @@ export default function PurchaseDetailPage() {
         if(wList.length > 0) setSelectedWalletId(wList[0].id);
     };
 
-    // --- LOGIC 1: RECEIVE GOODS (Update Stok) ---
+    // --- LOGIC 1: RECEIVE GOODS (Update Stok Only - No Double Journal) ---
+    // Note: Jurnal Persediaan biasanya terjadi saat PO dibuat (Accrual) atau saat Receive.
+    // Di sistem ini (Simple ERP), jurnal Persediaan vs Hutang sudah dicatat saat "Create PO / Import PO".
+    // Jadi Receive Goods hanya update status operasional & Qty Fisik.
     const handleReceiveGoods = async () => {
         if(!confirm("Pastikan fisik barang sudah diterima di gudang.")) return;
         const tId = toast.loading("Processing Stock In...");
@@ -90,7 +93,7 @@ export default function PurchaseDetailPage() {
         } catch(e) { toast.error(e.message, { id: tId }); }
     };
 
-    // --- LOGIC 2: PAYMENT (Update Finance via Helper) ---
+    // --- LOGIC 2: PAYMENT (FIXED: Debit Hutang, Kredit Kas) ---
     const handlePayment = async (e) => {
         e.preventDefault();
         const amount = parseFloat(payAmount);
@@ -99,22 +102,26 @@ export default function PurchaseDetailPage() {
 
         const tId = toast.loading("Mencatat Pembayaran...");
         try {
-            // 1. Ambil Settings untuk Mapping Akun Inventory/Hutang
-            let inventoryAccId = '';
+            // 1. Ambil Settings untuk Mapping Akun HUTANG (Payable)
+            let payableAccId = '';
             const settingSnap = await getDoc(doc(db, "settings", "general"));
             if(settingSnap.exists()) {
-                inventoryAccId = settingSnap.data().financeConfig?.defaultInventoryId;
+                payableAccId = settingSnap.data().financeConfig?.defaultPayableId;
             }
 
-            // Fallback: Cari manual kode 1301 jika belum disetting
-            if (!inventoryAccId) {
+            // Fallback: Cari manual kode 2101 jika belum disetting
+            if (!payableAccId) {
                 const accQ = query(collection(db, "chart_of_accounts"), orderBy("code"));
                 const accS = await getDocs(accQ);
-                const found = accS.docs.find(d => d.data().code === '1301');
-                if (found) inventoryAccId = found.id;
+                const found = accS.docs.find(d => d.data().code === '2101');
+                if (found) payableAccId = found.id;
             }
 
-            const batch = writeBatch(db); // Gunakan Batch agar atomic
+            if (!payableAccId) {
+                console.warn("Akun Hutang (2101) tidak ditemukan! Transaksi mungkin unassigned.");
+            }
+
+            const batch = writeBatch(db); 
 
             const poRef = doc(db, "purchase_orders", id);
             const newPaid = (po.amount_paid || 0) + amount;
@@ -124,20 +131,21 @@ export default function PurchaseDetailPage() {
             // 1. Update PO Header
             batch.update(poRef, { amount_paid: newPaid, payment_status: newStatus, updated_at: serverTimestamp() });
 
-            // 2. Catat Log Pembayaran PO (Untuk History PO saja)
+            // 2. Catat Log Pembayaran PO
             const payLogRef = doc(collection(db, "purchase_payments"));
             batch.set(payLogRef, { 
                 po_id: id, amount: amount, date: serverTimestamp(), recorder: user?.email, wallet_id: selectedWalletId 
             });
 
-            // 3. INTEGRASI FINANCE (Record Out Transaction)
-            // Uang Keluar (Kredit Wallet) -> Aset Persediaan Bertambah (Debit Inventory)
+            // 3. INTEGRASI FINANCE (SSOT FIXED)
+            // Kredit: Kas (Wallet) -> Uang Keluar
+            // Debit: Hutang Usaha (Payable Account) -> Kewajiban Berkurang
             recordTransaction(db, batch, {
                 type: 'out',
                 amount: amount,
-                walletId: selectedWalletId, // Akun yang berkurang (Kredit)
-                categoryId: inventoryAccId || 'unassigned_purchase', // Akun Lawan
-                categoryName: 'Pembelian Stok',
+                walletId: selectedWalletId, // Akun yang berkurang (Kredit Kas)
+                categoryId: payableAccId || 'unassigned_payable', // Akun Lawan (Debit Hutang)
+                categoryName: 'Pelunasan Hutang Usaha',
                 description: `Bayar PO #${po.po_number || po.id.substring(0,8)}`,
                 refType: 'purchase_order',
                 refId: id,
@@ -146,13 +154,14 @@ export default function PurchaseDetailPage() {
 
             await batch.commit();
 
-            toast.success("Pembayaran Tercatat!", { id: tId });
+            toast.success("Pembayaran & Jurnal Tercatat!", { id: tId });
             setPayModalOpen(false); setPayAmount(''); fetchDetail();
             
             // Invalidate Caches
             if(typeof window !== 'undefined') {
                 localStorage.removeItem('lumina_cash_transactions_v2'); 
                 localStorage.removeItem('lumina_cash_data_v2'); 
+                localStorage.removeItem('lumina_purchases_history_v2');
             }
 
         } catch(e) { console.error(e); toast.error(`Gagal: ${e.message}`, { id: tId }); }

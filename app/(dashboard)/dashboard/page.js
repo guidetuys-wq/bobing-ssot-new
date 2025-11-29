@@ -2,7 +2,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, orderBy, getAggregateFromServer, sum, doc, getDoc, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, doc, getDoc, limit } from 'firebase/firestore';
 import { formatRupiah } from '@/lib/utils';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, ArcElement, BarElement } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
@@ -19,8 +19,8 @@ import { motion } from 'framer-motion';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, ArcElement);
 
 // --- KONFIGURASI CACHE ---
-const CACHE_MASTER_KEY = 'lumina_dash_master_v4'; // Versi baru v4
-const CACHE_SALES_PREFIX = 'lumina_dash_sales_v4_'; 
+const CACHE_MASTER_KEY = 'lumina_dash_master_v5_ssot'; // Bump version for SSOT
+const CACHE_SALES_PREFIX = 'lumina_dash_sales_v5_'; 
 const CACHE_DURATION_MASTER = 5 * 60 * 1000; 
 const CACHE_DURATION_SALES = 5 * 60 * 1000;   
 
@@ -39,7 +39,7 @@ export default function Dashboard() {
     const [lowStockItems, setLowStockItems] = useState([]);
     const [recentSales, setRecentSales] = useState([]);
 
-    // 1. Fetch Master Data (Inventory & Cash Balance)
+    // 1. Fetch Master Data (SSOT: Chart of Accounts & Stock)
     const fetchMasterData = async () => {
         // Cek Cache
         if (typeof window !== 'undefined') {
@@ -50,23 +50,37 @@ export default function Dashboard() {
             }
         }
 
-        // --- FIX: Ambil Total Saldo dari Akun Kas (Bukan Transaksi) ---
-        // Ini memastikan saldo awal/import ikut terhitung
-        const cashAggPromise = getAggregateFromServer(collection(db, "cash_accounts"), { 
-            totalBalance: sum('balance') 
-        });
-
-        const invStatsPromise = getDoc(doc(db, "stats_inventory", "general"));
+        // [UPDATED] Ambil Saldo Langsung dari Chart of Accounts (COA)
+        // Kita cari akun Aset Lancar (Kas/Bank) dan Inventory (1301)
+        const accPromise = getDocs(collection(db, "chart_of_accounts"));
+        
         const lowStockPromise = getDocs(query(collection(db, "stock_snapshots"), where("qty", "<=", 5), limit(10)));
         const productsPromise = getDocs(collection(db, "products"));
         const variantsPromise = getDocs(collection(db, "product_variants"));
 
-        const [snapCash, snapInvStats, snapLowStock, snapProd, snapVar] = await Promise.all([
-            cashAggPromise, invStatsPromise, lowStockPromise, productsPromise, variantsPromise
+        const [snapAcc, snapLowStock, snapProd, snapVar] = await Promise.all([
+            accPromise, lowStockPromise, productsPromise, variantsPromise
         ]);
 
-        const cashBalance = snapCash.data().totalBalance || 0;
-        const invData = snapInvStats.exists() ? snapInvStats.data() : { total_value: 0, total_qty: 0 };
+        // Hitung Saldo Kas & Inventory dari COA
+        let totalCash = 0;
+        let totalInventoryFinance = 0; // Nilai Inventory menurut Akuntansi (Akun 1301)
+
+        snapAcc.forEach(doc => {
+            const d = doc.data();
+            const code = String(d.code);
+            const balance = parseFloat(d.balance) || 0;
+
+            // Logic Kas: Kode awalan 11 (Kas & Bank)
+            if (code.startsWith('11') || d.name.toLowerCase().includes('kas') || d.name.toLowerCase().includes('bank')) {
+                totalCash += balance;
+            }
+
+            // Logic Inventory: Kode 1301 atau nama 'Persediaan'
+            if (code.startsWith('13') || d.name.toLowerCase().includes('sediaan')) {
+                totalInventoryFinance += balance;
+            }
+        });
 
         const products = [];
         snapProd.forEach(d => products.push({ id: d.id, name: d.data().name }));
@@ -86,7 +100,12 @@ export default function Dashboard() {
             }
         });
 
-        const result = { cashBalance, products, variants, lowStocks, invStats: invData };
+        const result = { 
+            cashBalance: totalCash, 
+            inventoryValue: totalInventoryFinance,
+            lowStocks 
+        };
+        
         if (typeof window !== 'undefined') localStorage.setItem(CACHE_MASTER_KEY, JSON.stringify({ data: result, ts: Date.now() }));
         return result;
     };
@@ -99,7 +118,6 @@ export default function Dashboard() {
             if (cached) {
                 const { data, ts } = JSON.parse(cached);
                 if (Date.now() - ts < CACHE_DURATION_SALES) {
-                    // Revive Date Object
                     return data.map(d => ({ ...d, order_date: new Date(d.order_date) }));
                 }
             }
@@ -112,7 +130,6 @@ export default function Dashboard() {
 
         let q;
         if (range === 'all_time') {
-            // Fetch All (Limit 1000 terbaru untuk performa)
             q = query(collection(db, "sales_orders"), orderBy("order_date", "desc"), limit(1000));
         } else {
             if (range === 'today') start.setHours(0, 0, 0, 0);
@@ -129,7 +146,6 @@ export default function Dashboard() {
         const sales = [];
         snap.forEach(d => {
             const data = d.data();
-            // Simpan date sebagai timestamp agar bisa disimpan di JSON
             sales.push({ 
                 id: d.id, 
                 ...data, 
@@ -160,59 +176,61 @@ export default function Dashboard() {
     const processDashboard = (sales, master) => {
         if (!master) return;
 
-        let totalGross = 0, totalNet = 0, totalCost = 0;
+        let totalGross = 0, totalNet = 0, totalCost = 0, totalProfit = 0;
         const trendMap = {}; 
         const channels = {};
         const prodStats = {};
         const recentList = [];
 
         sales.forEach(d => {
-            // --- FIX UTAMA: Baca data dari field 'financial' ---
+            // Data Keuangan dari Sales Order (SSOT)
             const fin = d.financial || {};
             
-            // Fallback bertingkat: financial.field -> root.field -> 0
+            // Prioritas: Ambil data financial yang sudah terhitung di backend/POS
             const gross = Number(fin.total_sales || d.total_sales || d.gross_amount || 0);
             const net = Number(fin.net_payout || d.net_payout || d.net_amount || 0);
-            const cost = Number(fin.total_hpp || d.total_hpp || d.total_cost || 0);
+            
+            // HPP & Profit (Critical for Margin)
+            // Jika gross_profit sudah ada (dari POS baru), pakai itu. Jika tidak, hitung manual.
+            const cost = Number(fin.total_hpp || d.total_hpp || 0);
+            const itemProfit = Number(fin.gross_profit !== undefined ? fin.gross_profit : (gross - cost));
 
             totalGross += gross;
             totalNet += net;
             totalCost += cost;
+            totalProfit += itemProfit;
             
-            // Logic Grafik Dinamis
+            // --- Chart Trend Logic ---
             let timeKey;
             const dateObj = new Date(d.order_date);
             
             if (filterRange === 'today') {
                 timeKey = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
             } else if (filterRange === 'all_time') {
-                timeKey = dateObj.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' }); // Group by Bulan
+                timeKey = dateObj.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' });
             } else {
-                timeKey = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }); // Group by Tanggal
+                timeKey = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
             }
 
             if (!trendMap[timeKey]) trendMap[timeKey] = { gross: 0, profit: 0 };
             trendMap[timeKey].gross += gross;
-            trendMap[timeKey].profit += (net - cost); 
+            trendMap[timeKey].profit += itemProfit; 
 
-            // Channel Logic
+            // --- Channel Mix ---
             const ch = (d.channel_store_name || d.channel_id || 'Manual POS').toUpperCase();
             channels[ch] = (channels[ch] || 0) + gross;
 
-            // Top Product Logic (Parsing from items_preview or summary)
+            // --- Product Stats ---
             if (Array.isArray(d.items_preview)) {
                 d.items_preview.forEach(i => {
                     const name = i.product_name || i.name;
                     if(name) prodStats[name] = (prodStats[name] || 0) + (i.qty || 0);
                 });
             } else if (d.items_summary) {
-                // Fallback untuk data lama
                 const parts = d.items_summary.split(', ');
                 parts.forEach(p => {
                     const match = p.match(/(.*)\s\((\d+)\)$/);
-                    if (match) {
-                        prodStats[match[1].trim()] = (prodStats[match[1].trim()] || 0) + parseInt(match[2]);
-                    }
+                    if (match) prodStats[match[1].trim()] = (prodStats[match[1].trim()] || 0) + parseInt(match[2]);
                 });
             }
 
@@ -225,39 +243,36 @@ export default function Dashboard() {
             });
         });
 
-        // Hitung Profit & Margin
-        const profit = totalNet - totalCost;
-        const margin = totalNet > 0 ? (profit / totalNet) * 100 : 0;
+        // Margin Calculation
+        const margin = totalGross > 0 ? (totalProfit / totalGross) * 100 : 0;
 
         setKpi({ 
             gross: totalGross, 
             net: totalNet, 
-            profit: profit, 
+            profit: totalProfit, 
             margin: margin.toFixed(1), 
             txCount: sales.length, 
-            cash: master.cashBalance, // Menggunakan saldo real dari akun kas
-            inventoryAsset: master.invStats ? master.invStats.total_value : 0 
+            
+            // KPI ASSETS (SSOT: Dari Saldo Akun)
+            cash: master.cashBalance, 
+            inventoryAsset: master.inventoryValue 
         });
 
-        // Chart Data
+        // Chart Data Prep
         setChartTrendData({
             labels: Object.keys(trendMap),
             datasets: [
                 { 
-                    label: 'Omzet', 
+                    label: 'Revenue', 
                     data: Object.values(trendMap).map(x => x.gross), 
-                    borderColor: '#2563EB', 
-                    backgroundColor: 'rgba(37, 99, 235, 0.1)', 
-                    fill: true, 
-                    tension: 0.4 
+                    borderColor: '#2563EB', backgroundColor: 'rgba(37, 99, 235, 0.1)', 
+                    fill: true, tension: 0.4 
                 },
                 { 
-                    label: 'Profit', 
+                    label: 'Gross Profit', 
                     data: Object.values(trendMap).map(x => x.profit), 
-                    borderColor: '#10B981', 
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)', 
-                    fill: true, 
-                    tension: 0.4 
+                    borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', 
+                    fill: true, tension: 0.4 
                 }
             ]
         });
@@ -273,11 +288,10 @@ export default function Dashboard() {
 
         setTopProducts(Object.entries(prodStats).sort((a, b) => b[1] - a[1]).slice(0, 5));
         setLowStockItems(master.lowStocks || []); 
-        // Recent Sales di-reverse agar yang terbaru di atas, ambil 5
         setRecentSales(recentList.sort((a,b) => b.time - a.time).slice(0, 5));
     };
 
-    // --- COMPONENTS ---
+    // --- SUB-COMPONENT: KPI CARD ---
     const KpiCard = ({ title, value, sub, icon: Icon, color, delay }) => {
         const colorClasses = {
             blue: 'text-blue-600 bg-blue-50 border-blue-100',
@@ -308,6 +322,7 @@ export default function Dashboard() {
                         <Icon className="w-5 h-5" />
                     </div>
                 </div>
+                {/* Decorative Blob */}
                 <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-5 ${activeClass.split(' ')[1]}`}></div>
             </motion.div>
         );
@@ -318,7 +333,7 @@ export default function Dashboard() {
             
             <PageHeader 
                 title="Dashboard" 
-                subtitle="Ringkasan performa bisnis real-time."
+                subtitle="Ringkasan performa bisnis (Finance SSOT)."
                 actions={
                     <div className="relative">
                         <select 
@@ -326,10 +341,10 @@ export default function Dashboard() {
                             onChange={(e) => setFilterRange(e.target.value)} 
                             className="appearance-none pl-9 pr-8 py-2 bg-white border border-border rounded-xl text-xs font-bold text-text-primary shadow-sm focus:outline-none focus:border-primary cursor-pointer"
                         >
-                            <option value="this_month">Bulan Ini</option>
                             <option value="today">Hari Ini</option>
+                            <option value="this_month">Bulan Ini</option>
                             <option value="last_month">Bulan Lalu</option>
-                            <option value="all_time">Semua Waktu</option> {/* Added All Time */}
+                            <option value="all_time">Semua Waktu</option>
                         </select>
                         <Calendar className="w-3.5 h-3.5 text-text-secondary absolute left-3 top-2.5" />
                         <div className="absolute right-3 top-2.5 pointer-events-none text-text-secondary">
@@ -339,23 +354,52 @@ export default function Dashboard() {
                 }
             />
 
-            {/* KPI Cards */}
+            {/* KPI Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard title="Total Revenue" value={formatRupiah(kpi.gross)} sub={`${kpi.txCount} Transaksi`} color="blue" icon={DollarSign} delay={0.1} />
-                <KpiCard title="Net Profit" value={formatRupiah(kpi.profit)} sub={`Margin ${kpi.margin}%`} color="emerald" icon={TrendingUp} delay={0.2} />
-                <KpiCard title="Liquid Cash" value={formatRupiah(kpi.cash)} sub="Total Saldo Kas" color="purple" icon={Wallet} delay={0.3} />
-                <KpiCard title="Inventory Value" value={formatRupiah(kpi.inventoryAsset)} sub="Total Aset Stok" color="amber" icon={Package} delay={0.4} />
+                <KpiCard 
+                    title="Total Sales" 
+                    value={formatRupiah(kpi.gross)} 
+                    sub={`${kpi.txCount} Transaksi`} 
+                    color="blue" 
+                    icon={DollarSign} 
+                    delay={0.1} 
+                />
+                <KpiCard 
+                    title="Gross Profit" 
+                    value={formatRupiah(kpi.profit)} 
+                    sub={`Margin ${kpi.margin}%`} 
+                    color="emerald" 
+                    icon={TrendingUp} 
+                    delay={0.2} 
+                />
+                <KpiCard 
+                    title="Liquid Cash" 
+                    value={formatRupiah(kpi.cash)} 
+                    sub="Total Saldo Kas & Bank" 
+                    color="purple" 
+                    icon={Wallet} 
+                    delay={0.3} 
+                />
+                <KpiCard 
+                    title="Inventory Asset" 
+                    value={formatRupiah(kpi.inventoryAsset)} 
+                    sub="Nilai Persediaan (1301)" 
+                    color="amber" 
+                    icon={Package} 
+                    delay={0.4} 
+                />
             </div>
 
             {/* Charts Area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Trend Chart */}
                 <motion.div 
                     initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
                     className="lg:col-span-2 bg-white p-6 rounded-2xl border border-border shadow-sm"
                 >
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-bold text-text-primary text-sm flex items-center gap-2">
-                            <ArrowUpRight className="w-4 h-4 text-primary"/> Performance Trend
+                            <ArrowUpRight className="w-4 h-4 text-primary"/> Revenue & Profit Trend
                         </h3>
                     </div>
                     <div className="h-72 w-full relative">
@@ -363,12 +407,13 @@ export default function Dashboard() {
                     </div>
                 </motion.div>
 
+                {/* Channel Mix Chart */}
                 <motion.div 
                     initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}
                     className="bg-white p-6 rounded-2xl border border-border shadow-sm flex flex-col"
                 >
                     <h3 className="font-bold text-text-primary text-sm mb-4 flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-accent"/> Channel Mix
+                        <Filter className="w-4 h-4 text-accent"/> Sales by Channel
                     </h3>
                     <div className="h-56 w-full relative flex justify-center items-center flex-1">
                          {chartChannelData ? <Doughnut data={chartChannelData} options={{ responsive: true, maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#6B7280', font: {size: 10}, usePointStyle: true, padding: 20 } } } }} /> : <Skeleton className="h-40 w-40 rounded-full" />}
@@ -376,14 +421,14 @@ export default function Dashboard() {
                 </motion.div>
             </div>
 
-            {/* Widget Grids */}
+            {/* Bottom Widgets */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                {/* Top Products */}
+                {/* 1. Top Products */}
                 <div className="bg-white border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col">
                     <div className="px-5 py-4 border-b border-border bg-gray-50/50 flex items-center gap-2">
                         <div className="w-6 h-6 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600"><TrendingUp className="w-3.5 h-3.5"/></div>
-                        <h3 className="font-bold text-text-primary text-xs uppercase tracking-wider">Top Products</h3>
+                        <h3 className="font-bold text-text-primary text-xs uppercase tracking-wider">Top Selling</h3>
                     </div>
                     <div className="p-2 overflow-y-auto max-h-[300px] custom-scrollbar">
                         {topProducts.length === 0 ? <p className="text-center text-xs text-text-secondary py-4">No data</p> : 
@@ -399,7 +444,7 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Low Stock */}
+                {/* 2. Low Stock Alert */}
                 <div className="bg-white border border-rose-100 rounded-2xl overflow-hidden shadow-sm flex flex-col">
                     <div className="px-5 py-4 border-b border-rose-100 bg-rose-50/30 flex justify-between items-center">
                         <div className="flex items-center gap-2">
@@ -409,7 +454,7 @@ export default function Dashboard() {
                         <span className="text-[10px] bg-white border border-rose-200 text-rose-600 px-2 py-0.5 rounded-full font-bold">{lowStockItems.length}</span>
                     </div>
                     <div className="divide-y divide-rose-50 overflow-y-auto max-h-[300px] custom-scrollbar">
-                        {lowStockItems.length === 0 ? <p className="text-center text-xs text-text-secondary py-4">Stock aman</p> : 
+                        {lowStockItems.length === 0 ? <p className="text-center text-xs text-text-secondary py-4">Semua stok aman</p> : 
                         lowStockItems.map((item, i) => (
                             <div key={i} className="px-5 py-3 hover:bg-rose-50/20 transition-colors">
                                 <div className="flex justify-between items-start">
@@ -422,6 +467,7 @@ export default function Dashboard() {
                                         <span className="text-[9px] text-rose-400 block">Min: {item.min}</span>
                                     </div>
                                 </div>
+                                {/* Progress bar min stock */}
                                 <div className="w-full h-1 bg-rose-100 rounded-full mt-2 overflow-hidden">
                                     <div className="h-full bg-rose-500 rounded-full" style={{ width: `${Math.min((item.qty/item.min)*100, 100)}%` }}></div>
                                 </div>
@@ -430,14 +476,14 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Recent Sales */}
+                {/* 3. Recent Sales Live */}
                 <div className="bg-white border border-border rounded-2xl overflow-hidden shadow-sm flex flex-col">
                     <div className="px-5 py-4 border-b border-border bg-gray-50/50 flex items-center gap-2">
                         <div className="w-6 h-6 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600"><ShoppingBag className="w-3.5 h-3.5"/></div>
-                        <h3 className="font-bold text-text-primary text-xs uppercase tracking-wider">Live Sales</h3>
+                        <h3 className="font-bold text-text-primary text-xs uppercase tracking-wider">Recent Orders</h3>
                     </div>
                     <div className="p-2 overflow-y-auto max-h-[300px] custom-scrollbar">
-                        {recentSales.length === 0 ? <p className="text-center text-xs text-text-secondary py-4">Belum ada penjualan</p> : 
+                        {recentSales.length === 0 ? <p className="text-center text-xs text-text-secondary py-4">Belum ada transaksi</p> : 
                         recentSales.map((s, i) => (
                             <div key={i} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors group">
                                 <div className="flex items-center gap-3">

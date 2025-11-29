@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, runTransaction, query, orderBy, where, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, runTransaction, query, orderBy, where, limit, serverTimestamp, getDoc } from 'firebase/firestore';
 import { sortBySize, formatRupiah } from '@/lib/utils';
 import { Portal } from '@/lib/usePortal';
 import toast from 'react-hot-toast';
@@ -12,11 +12,14 @@ import PageHeader from '@/components/PageHeader';
 import { 
     Search, RotateCcw, ChevronRight, ChevronDown, 
     Plus, History, ClipboardList, Warehouse, Package, 
-    ShoppingCart, Trash2, X, FileText, AlertCircle 
+    ShoppingCart, Trash2, X, FileText, AlertCircle, Filter, Tag, Layers 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const CACHE_KEY = 'lumina_inventory_v2';
+// --- INTEGRASI FINANCE (SSOT) ---
+import { recordAdjustmentTransaction, recordPurchaseTransaction } from '@/lib/transactionService';
+
+const CACHE_KEY = 'lumina_inventory_v3_filters'; // Bump version
 const CACHE_DURATION = 15 * 60 * 1000;
 
 export default function InventoryPage() {
@@ -24,13 +27,16 @@ export default function InventoryPage() {
     const [products, setProducts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [suppliers, setSuppliers] = useState([]); 
+    const [categories, setCategories] = useState([]); 
+    const [collections, setCollections] = useState([]); 
     const [snapshots, setSnapshots] = useState({}); 
     const [loading, setLoading] = useState(true);
-    const [lastRefresh, setLastRefresh] = useState(null);
     
     // UI State
     const [searchTerm, setSearchTerm] = useState('');
     const [filterWarehouse, setFilterWarehouse] = useState('all');
+    const [filterCategory, setFilterCategory] = useState('all'); 
+    const [filterCollection, setFilterCollection] = useState('all'); 
     const [expandedProductId, setExpandedProductId] = useState(null); 
     
     // Cart PO State
@@ -56,12 +62,13 @@ export default function InventoryPage() {
             if (!forceRefresh) {
                 const cached = localStorage.getItem(CACHE_KEY);
                 if (cached) {
-                    const { products: cp, warehouses: cw, snapshots: cs, timestamp } = JSON.parse(cached);
+                    const { products: cp, warehouses: cw, categories: cc, collections: ccol, snapshots: cs, timestamp } = JSON.parse(cached);
                     if (Date.now() - timestamp < CACHE_DURATION) {
                         setProducts(cp);
                         setWarehouses(cw);
+                        setCategories(cc || []);
+                        setCollections(ccol || []);
                         setSnapshots(cs);
-                        setLastRefresh(new Date(timestamp)); 
                         setLoading(false);
                         fetchSuppliers();
                         return;
@@ -69,11 +76,13 @@ export default function InventoryPage() {
                 }
             }
 
-            const [prodSnap, whSnap, snapSnap, varSnap] = await Promise.all([
+            const [prodSnap, whSnap, snapSnap, varSnap, catSnap, colSnap] = await Promise.all([
                 getDocs(collection(db, "products")),
                 getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
                 getDocs(collection(db, "stock_snapshots")),
-                getDocs(collection(db, "product_variants"))
+                getDocs(collection(db, "product_variants")),
+                getDocs(query(collection(db, "categories"), orderBy("name"))), 
+                getDocs(query(collection(db, "collections"), orderBy("name"))) 
             ]);
 
             const variantsMap = {}; 
@@ -93,22 +102,24 @@ export default function InventoryPage() {
             });
 
             const whs = [];
-            whSnap.forEach(d => {
-                whs.push({ id: d.id, ...d.data() });
-            });
+            whSnap.forEach(d => whs.push({ id: d.id, ...d.data() }));
+
+            const cats = []; catSnap.forEach(d => cats.push({id:d.id, ...d.data()}));
+            const cols = []; colSnap.forEach(d => cols.push({id:d.id, ...d.data()}));
 
             const snapMap = {};
             snapSnap.forEach(d => { snapMap[d.id] = d.data().qty || 0; });
 
             setProducts(prods);
             setWarehouses(whs);
+            setCategories(cats);
+            setCollections(cols);
             setSnapshots(snapMap);
-            setLastRefresh(new Date()); 
             
             await fetchSuppliers();
 
             localStorage.setItem(CACHE_KEY, JSON.stringify({
-                products: prods, warehouses: whs, snapshots: snapMap, timestamp: Date.now()
+                products: prods, warehouses: whs, categories: cats, collections: cols, snapshots: snapMap, timestamp: Date.now()
             }));
 
         } catch (e) {
@@ -131,30 +142,15 @@ export default function InventoryPage() {
         fetchData(true).then(() => toast.success("Inventory Terupdate!", { id: t }));
     };
 
-    // --- CART LOGIC (With Toast) ---
+    // --- CART LOGIC ---
     const addToPoCart = (variant, product) => {
         setPoCart(prev => {
             const existing = prev.find(i => i.variant_id === variant.id);
             if (existing) {
-                // Update Qty
-                toast.success(
-                    <div className="text-xs">
-                        <b>{product.name}</b><br/>
-                        Qty Updated: {variant.sku}
-                    </div>, 
-                    { icon: '➕', duration: 2000 }
-                );
+                toast.success(<div className="text-xs"><b>{product.name}</b><br/>Qty Updated: {variant.sku}</div>, { icon: '➕', duration: 2000 });
                 return prev.map(i => i.variant_id === variant.id ? { ...i, qty: i.qty + 1 } : i);
             }
-            
-            // Add New
-            toast.success(
-                <div className="text-xs">
-                    <b>{product.name}</b><br/>
-                    Ditambahkan ke Draft PO
-                </div>, 
-                { icon: '🛒', duration: 2000 }
-            );
+            toast.success(<div className="text-xs"><b>{product.name}</b><br/>Ditambahkan ke Draft PO</div>, { icon: '🛒', duration: 2000 });
             return [...prev, {
                 variant_id: variant.id,
                 sku: variant.sku,
@@ -170,17 +166,32 @@ export default function InventoryPage() {
         setPoCart(prev => prev.filter((_, i) => i !== idx));
     };
 
+    // --- FINALIZE PO (SSOT FIXED) ---
     const handleFinalizePO = async () => {
         if(!poForm.supplier_id || !poForm.warehouse_id) return toast.error("Pilih Supplier & Gudang!");
         if(poCart.length === 0) return toast.error("Keranjang kosong!");
 
         const tId = toast.loading("Membuat Purchase Order...");
         try {
+            // 1. Finance Config
+            const settingSnap = await getDoc(doc(db, "settings", "general"));
+            const financeConfig = settingSnap.exists() ? settingSnap.data().financeConfig : null;
+
             const totalAmount = poCart.reduce((a, b) => a + (b.qty * b.cost), 0);
             const totalQty = poCart.reduce((a, b) => a + b.qty, 0);
             const supplierName = suppliers.find(s => s.id === poForm.supplier_id)?.name || 'Unknown';
 
             await runTransaction(db, async (t) => {
+                // FASE 1: PRE-FETCH SNAPSHOTS
+                const snapshotDataMap = new Map();
+                for (const item of poCart) {
+                    const snapId = `${item.variant_id}_${poForm.warehouse_id}`;
+                    const snapRef = doc(db, "stock_snapshots", snapId);
+                    const snapDoc = await t.get(snapRef);
+                    snapshotDataMap.set(item.variant_id, { ref: snapRef, doc: snapDoc });
+                }
+
+                // FASE 2: EXECUTE WRITES
                 const poRef = doc(collection(db, "purchase_orders"));
                 t.set(poRef, {
                     supplier_name: supplierName,
@@ -214,14 +225,24 @@ export default function InventoryPage() {
                         notes: `Quick PO ${supplierName}`
                     });
 
-                    const snapId = `${item.variant_id}_${poForm.warehouse_id}`;
-                    const snapRef = doc(db, "stock_snapshots", snapId);
-                    const snapDoc = await t.get(snapRef);
+                    const { ref: snapRef, doc: snapDoc } = snapshotDataMap.get(item.variant_id);
                     if (snapDoc.exists()) {
                         t.update(snapRef, { qty: (snapDoc.data().qty || 0) + item.qty });
                     } else {
-                        t.set(snapRef, { id: snapId, variant_id: item.variant_id, warehouse_id: poForm.warehouse_id, qty: item.qty });
+                        t.set(snapRef, { id: snapRef.id, variant_id: item.variant_id, warehouse_id: poForm.warehouse_id, qty: item.qty });
                     }
+                }
+
+                // FINANCE JURNAL
+                if (financeConfig) {
+                    recordPurchaseTransaction(db, t, {
+                        poId: poRef.id,
+                        totalAmount: totalAmount,
+                        isPaid: false,
+                        walletId: null,
+                        supplierName: supplierName,
+                        financeConfig: financeConfig
+                    });
                 }
             });
 
@@ -232,7 +253,7 @@ export default function InventoryPage() {
             localStorage.removeItem(CACHE_KEY);
             localStorage.removeItem('lumina_purchases_history_v2');
             
-            toast.success("PO Berhasil Dibuat!", { id: tId });
+            toast.success("PO Berhasil & Jurnal Hutang Tercatat!", { id: tId });
             fetchData(true);
 
         } catch (e) {
@@ -241,15 +262,33 @@ export default function InventoryPage() {
         }
     };
 
-    // --- EXISTING HELPERS ---
     const getProductTotalStock = (product, whId) => {
         return product.variants.reduce((acc, v) => acc + (snapshots[`${v.id}_${whId}`] || 0), 0);
     };
 
     const getProductGlobalStock = (product) => {
         let total = 0;
-        warehouses.forEach(w => { total += getProductTotalStock(product, w.id); });
+        // Filter by warehouse if selected
+        const targetWhs = filterWarehouse === 'all' ? warehouses : warehouses.filter(w => w.id === filterWarehouse);
+        targetWhs.forEach(w => { total += getProductTotalStock(product, w.id); });
         return total;
+    };
+
+    // Calculate Asset Value for Filtered View
+    const getFilteredAssetValue = () => {
+        let totalVal = 0;
+        filteredProducts.forEach(p => {
+            p.variants.forEach(v => {
+                let qty = 0;
+                if(filterWarehouse === 'all') {
+                    qty = warehouses.reduce((acc, w) => acc + (snapshots[`${v.id}_${w.id}`] || 0), 0);
+                } else {
+                    qty = snapshots[`${v.id}_${filterWarehouse}`] || 0;
+                }
+                totalVal += qty * (v.cost || 0);
+            });
+        });
+        return totalVal;
     };
 
     const openAdjustment = (variant, whId) => {
@@ -261,11 +300,16 @@ export default function InventoryPage() {
 
     const handleSaveAdjustment = async () => {
         if (!selectedVariant) return;
-        const tId = toast.loading("Menyimpan...");
+        const tId = toast.loading("Menyimpan & Menghitung Cost...");
         try {
+            const settingSnap = await getDoc(doc(db, "settings", "general"));
+            const financeConfig = settingSnap.exists() ? settingSnap.data().financeConfig : null;
+
             const { id: variantId, warehouse_id } = selectedVariant;
             const targetQty = parseInt(adjForm.qty);
             const diff = targetQty - selectedVariant.current_qty;
+            const unitCost = selectedVariant.cost || 0;
+            const totalValue = Math.abs(diff * unitCost);
 
             await runTransaction(db, async (transaction) => {
                 const moveRef = doc(collection(db, "stock_movements"));
@@ -275,24 +319,34 @@ export default function InventoryPage() {
                     qty: diff, date: serverTimestamp(), notes: adjForm.notes || 'Manual Adj',
                     created_by: 'admin'
                 });
+
                 const snapRef = doc(db, "stock_snapshots", `${variantId}_${warehouse_id}`);
                 transaction.set(snapRef, {
                     id: `${variantId}_${warehouse_id}`, variant_id: variantId, warehouse_id: warehouse_id,
                     qty: targetQty, updated_at: serverTimestamp()
                 }, { merge: true });
+
+                if (diff < 0 && financeConfig && totalValue > 0) {
+                    recordAdjustmentTransaction(db, transaction, {
+                        refId: moveRef.id,
+                        totalValue: totalValue,
+                        type: 'loss',
+                        financeConfig: financeConfig
+                    });
+                }
             });
 
             const newSnaps = { ...snapshots, [`${variantId}_${warehouse_id}`]: targetQty };
             setSnapshots(newSnaps);
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ products, warehouses, snapshots: newSnaps, timestamp: Date.now() }));
+            localStorage.setItem(CACHE_KEY, JSON.stringify({ products, warehouses, categories, collections, snapshots: newSnaps, timestamp: Date.now() }));
             
-            toast.success("Stok diperbarui!", { id: tId });
+            toast.success("Stok & Jurnal Tersimpan!", { id: tId });
             setModalAdjOpen(false);
         } catch (e) { toast.error(e.message, { id: tId }); }
     };
 
     const openStockCard = async (variant, whId) => {
-        setCardData(null); // Set loading state
+        setCardData(null); 
         setModalCardOpen(true);
         setSelectedVariant({ ...variant, warehouse_id: whId });
         try {
@@ -311,10 +365,31 @@ export default function InventoryPage() {
         }
     };
 
-    const filteredProducts = products.filter(p => 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        p.base_sku?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // --- HELPER: RECURSIVE CATEGORY FINDER ---
+    const getCategoryFamily = (parentId, allCats) => {
+        let ids = [parentId];
+        const children = allCats.filter(c => c.parent_id === parentId);
+        children.forEach(child => {
+            ids = [...ids, ...getCategoryFamily(child.id, allCats)];
+        });
+        return ids;
+    };
+
+    // --- FILTER LOGIC (UPDATED WITH RECURSION) ---
+    const filteredProducts = products.filter(p => {
+        const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            p.base_sku?.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        // Recursive Category Filter
+        let matchCat = true;
+        if (filterCategory !== 'all') {
+            const familyIds = getCategoryFamily(filterCategory, categories);
+            matchCat = familyIds.includes(p.category_id);
+        }
+
+        const matchCol = filterCollection === 'all' || p.collection_id === filterCollection;
+        return matchSearch && matchCat && matchCol;
+    });
 
     const displayedWarehouses = filterWarehouse === 'all' 
         ? warehouses 
@@ -329,18 +404,7 @@ export default function InventoryPage() {
                 subtitle="Real-time stock monitoring & procurement." 
                 actions={
                     <div className="flex gap-3 items-center">
-                        <div className="relative w-64 md:w-80 group">
-                            <Search className="w-4 h-4 text-text-secondary absolute left-3 top-3 group-focus-within:text-primary transition-colors" />
-                            <input 
-                                type="text" 
-                                className="w-full pl-10 py-2.5 text-sm bg-white border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 text-text-primary placeholder:text-text-secondary transition-all shadow-sm"
-                                placeholder="Cari Produk / SKU..." 
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                        
-                        {/* Header Cart Button (Desktop) */}
+                        {/* Cart Button */}
                         <button 
                             onClick={() => setIsCartOpen(true)}
                             className="bg-white border border-border text-text-primary p-2.5 rounded-xl shadow-sm hover:bg-gray-50 relative group hidden md:flex"
@@ -361,6 +425,52 @@ export default function InventoryPage() {
                 }
             />
 
+            {/* FILTER BAR (ADVANCED) */}
+            <div className="bg-white p-4 rounded-2xl border border-border shadow-sm flex flex-col md:flex-row gap-4 items-center">
+                <div className="relative flex-1 w-full group">
+                    <Search className="w-4 h-4 text-text-secondary absolute left-3 top-3 group-focus-within:text-primary transition-colors" />
+                    <input 
+                        type="text" 
+                        className="w-full pl-10 py-2.5 text-sm bg-gray-50 border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 text-text-primary placeholder:text-text-secondary transition-all shadow-sm"
+                        placeholder="Cari Produk / SKU..." 
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                
+                <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+                    {/* Warehouse Filter */}
+                    <div className="relative min-w-[140px]">
+                        <Warehouse className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-3" />
+                        <select value={filterWarehouse} onChange={(e) => setFilterWarehouse(e.target.value)} className="w-full pl-9 pr-8 py-2.5 text-xs font-bold bg-white border border-border rounded-xl appearance-none focus:outline-none focus:border-primary cursor-pointer">
+                            <option value="all">Semua Gudang</option>
+                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-3 pointer-events-none" />
+                    </div>
+
+                    {/* Category Filter */}
+                    <div className="relative min-w-[140px]">
+                        <Filter className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-3" />
+                        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="w-full pl-9 pr-8 py-2.5 text-xs font-bold bg-white border border-border rounded-xl appearance-none focus:outline-none focus:border-primary cursor-pointer">
+                            <option value="all">Semua Kategori</option>
+                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-3 pointer-events-none" />
+                    </div>
+
+                    {/* Collection Filter */}
+                    <div className="relative min-w-[140px]">
+                        <Tag className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-3" />
+                        <select value={filterCollection} onChange={(e) => setFilterCollection(e.target.value)} className="w-full pl-9 pr-8 py-2.5 text-xs font-bold bg-white border border-border rounded-xl appearance-none focus:outline-none focus:border-primary cursor-pointer">
+                            <option value="all">Semua Koleksi</option>
+                            {collections.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-3 pointer-events-none" />
+                    </div>
+                </div>
+            </div>
+
             {/* INVENTORY TABLE MATRIX */}
             <div className="bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
                 <div className="overflow-x-auto min-h-[500px]">
@@ -379,12 +489,13 @@ export default function InventoryPage() {
                                         </div>
                                     </th>
                                 ))}
-                                {/* TOTAL COLUMN */}
-                                {filterWarehouse === 'all' && (
-                                    <th className="py-4 px-4 text-center min-w-[100px] border-l border-border/50 bg-gray-100/50">
-                                        Total Asset
-                                    </th>
-                                )}
+                                {/* TOTAL ASSET COLUMN (FILTERED) */}
+                                <th className="py-4 px-4 text-center min-w-[150px] border-l border-border/50 bg-emerald-50/50 text-emerald-800">
+                                    Total Asset<br/>
+                                    <span className="text-[10px] font-normal opacity-70">
+                                        (Selection: {formatRupiah(getFilteredAssetValue())})
+                                    </span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody className="text-sm text-text-primary divide-y divide-border/60">
@@ -417,7 +528,12 @@ export default function InventoryPage() {
                                                             <div className="font-bold text-text-primary text-sm line-clamp-1">{prod.name}</div>
                                                             <div className="flex items-center gap-2 mt-1">
                                                                 <span className="text-[10px] font-mono text-text-secondary bg-gray-100 px-1.5 py-0.5 rounded border border-border">{prod.base_sku}</span>
-                                                                <span className="text-[10px] text-text-secondary">{prod.variants.length} Varian</span>
+                                                                {/* Category Badge */}
+                                                                {prod.category_id && categories.find(c=>c.id===prod.category_id) && (
+                                                                    <span className="text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex items-center gap-1">
+                                                                        <Layers className="w-3 h-3"/> {categories.find(c=>c.id===prod.category_id).name}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -432,11 +548,10 @@ export default function InventoryPage() {
                                                         </td>
                                                     );
                                                 })}
-                                                {filterWarehouse === 'all' && (
-                                                    <td className="py-3 px-4 text-center border-l border-border/50 bg-gray-50/30">
-                                                        <span className="font-bold text-sm text-text-primary">{globalTotal}</span>
-                                                    </td>
-                                                )}
+                                                {/* Global Total Column */}
+                                                <td className="py-3 px-4 text-center border-l border-border/50 bg-emerald-50/10">
+                                                    <span className="font-bold text-sm text-emerald-700">{globalTotal}</span>
+                                                </td>
                                             </tr>
 
                                             <AnimatePresence>
@@ -477,13 +592,12 @@ export default function InventoryPage() {
                                                                 </td>
                                                             );
                                                         })}
-                                                        {filterWarehouse === 'all' && (
-                                                            <td className="py-2 px-4 text-center border-l border-border/30 bg-gray-50/20">
-                                                                <span className="text-xs text-text-secondary font-mono">
-                                                                    {displayedWarehouses.reduce((acc, w) => acc + (snapshots[`${v.id}_${w.id}`] || 0), 0)}
-                                                                </span>
-                                                            </td>
-                                                        )}
+                                                        {/* Total Variant */}
+                                                        <td className="py-2 px-4 text-center border-l border-border/30 bg-emerald-50/10">
+                                                            <span className="text-xs text-text-secondary font-mono">
+                                                                {displayedWarehouses.reduce((acc, w) => acc + (snapshots[`${v.id}_${w.id}`] || 0), 0)}
+                                                            </span>
+                                                        </td>
                                                     </motion.tr>
                                                 ))}
                                             </AnimatePresence>
@@ -597,7 +711,7 @@ export default function InventoryPage() {
                                     <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5"/>
                                     <div className="text-xs text-amber-800">
                                         <p className="font-bold">Konfirmasi Stok Masuk?</p>
-                                        <p>Stok akan langsung ditambahkan ke gudang terpilih dengan status <b>Received</b>.</p>
+                                        <p>Stok akan langsung ditambahkan ke gudang terpilih dengan status <b>Received</b>. Jurnal Hutang akan tercatat.</p>
                                     </div>
                                 </div>
                             </div>

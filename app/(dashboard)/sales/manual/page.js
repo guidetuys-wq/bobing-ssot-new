@@ -2,22 +2,22 @@
 "use client";
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, query, orderBy, serverTimestamp, increment, writeBatch, addDoc, getDoc } from 'firebase/firestore';
-import { formatRupiah, sortBySize } from '@/lib/utils'; // FIX: sortBySize dikembalikan
+import { collection, getDocs, doc, query, orderBy, serverTimestamp, increment, writeBatch, addDoc, getDoc, limit } from 'firebase/firestore';
+import { formatRupiah, sortBySize } from '@/lib/utils';
 import { Portal } from '@/lib/usePortal';
 import toast from 'react-hot-toast'; 
 import PageHeader from '@/components/PageHeader';
-import { ArrowLeft, Search, RotateCcw, ShoppingCart, User, Plus, X, Trash2, CreditCard, ChevronRight, Package, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, Search, RotateCcw, ShoppingCart, User, Plus, X, Trash2, CreditCard, ChevronRight, Package, Phone, MapPin, Tag, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Fuse from 'fuse.js';
 import { NumericFormat } from 'react-number-format';
 import { useAuth } from '@/context/AuthContext';
 
 // --- INTEGRASI FINANCE (SSOT) ---
-import { recordTransaction } from '@/lib/transactionService';
+import { recordSalesTransaction } from '@/lib/transactionService';
 
 // KONFIGURASI CACHE
-const CACHE_POS_MASTER = 'lumina_pos_master_v2';
+const CACHE_POS_MASTER = 'lumina_pos_master_v3_filters'; 
 const CACHE_POS_SNAPSHOTS = 'lumina_pos_snapshots_v2';
 const CACHE_DURATION_MASTER = 30 * 60 * 1000;
 const CACHE_DURATION_SNAPSHOTS = 5 * 60 * 1000;
@@ -31,6 +31,11 @@ export default function PosPage() {
     const [warehouses, setWarehouses] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [accounts, setAccounts] = useState([]);
+    
+    // Filter Data
+    const [categories, setCategories] = useState([]);
+    const [collections, setCollections] = useState([]);
+    
     const [snapshots, setSnapshots] = useState({});
     
     // UI State
@@ -39,6 +44,10 @@ export default function PosPage() {
     const [loading, setLoading] = useState(true);
     const [cashReceived, setCashReceived] = useState(''); 
     const [lastRefresh, setLastRefresh] = useState(null);
+    
+    // Active Filters
+    const [activeCategory, setActiveCategory] = useState('all');
+    const [activeCollection, setActiveCollection] = useState('all');
     
     // Customer Search State
     const [custSearch, setCustSearch] = useState('');
@@ -59,7 +68,18 @@ export default function PosPage() {
 
     const searchInputRef = useRef(null);
 
-    // --- FUZZY SEARCH (Smart Search) ---
+    // --- HELPER: RECURSIVE CATEGORY FINDER ---
+    // Mencari ID kategori ini + semua anak-anaknya
+    const getCategoryFamily = (parentId, allCats) => {
+        let ids = [parentId];
+        const children = allCats.filter(c => c.parent_id === parentId);
+        children.forEach(child => {
+            ids = [...ids, ...getCategoryFamily(child.id, allCats)];
+        });
+        return ids;
+    };
+
+    // --- FUZZY SEARCH & FILTERING ---
     const fuse = useMemo(() => {
         return new Fuse(products, {
             keys: ['name', 'base_sku', 'brand_name'],
@@ -68,9 +88,30 @@ export default function PosPage() {
     }, [products]);
 
     const filteredProducts = useMemo(() => {
-        if (!searchTerm) return products.slice(0, 50); 
-        return fuse.search(searchTerm).map(result => result.item);
-    }, [searchTerm, products, fuse]);
+        let res = products;
+
+        // 1. Filter by Category (Smart Hierarchy)
+        if (activeCategory !== 'all') {
+            const familyIds = getCategoryFamily(activeCategory, categories);
+            res = res.filter(p => familyIds.includes(p.category_id));
+        }
+
+        // 2. Filter by Collection
+        if (activeCollection !== 'all') {
+            res = res.filter(p => p.collection_id === activeCollection);
+        }
+
+        // 3. Search (Fuzzy)
+        if (searchTerm) {
+            const fuseResult = new Fuse(res, {
+                keys: ['name', 'base_sku', 'brand_name'],
+                threshold: 0.4
+            }).search(searchTerm);
+            res = fuseResult.map(r => r.item);
+        }
+
+        return res.slice(0, 100); // Limit render
+    }, [searchTerm, products, activeCategory, activeCollection, categories]); // Added categories dependency
 
     const filteredCustomers = customers.filter(c => 
         c.name.toLowerCase().includes(custSearch.toLowerCase())
@@ -95,17 +136,21 @@ export default function PosPage() {
             }
 
             if (!masterData) {
-                const [whS, prodS, varS, custS, accS] = await Promise.all([
+                const [whS, prodS, varS, custS, accS, catS, colS] = await Promise.all([
                     getDocs(query(collection(db, "warehouses"), orderBy("created_at"))),
                     getDocs(collection(db, "products")), 
                     getDocs(query(collection(db, "product_variants"), orderBy("sku"))),
                     getDocs(query(collection(db, "customers"), orderBy("name"))),
-                    getDocs(query(collection(db, "chart_of_accounts"), orderBy("code")))
+                    getDocs(query(collection(db, "chart_of_accounts"), orderBy("code"))),
+                    getDocs(query(collection(db, "categories"), orderBy("name"))),
+                    getDocs(query(collection(db, "collections"), orderBy("name")))
                 ]);
 
                 const wh = []; whS.forEach(d => wh.push({id:d.id, ...d.data()}));
                 const cust = []; custS.forEach(d => cust.push({id:d.id, ...d.data()}));
                 const acc = []; accS.forEach(d => acc.push({id:d.id, ...d.data()}));
+                const cats = []; catS.forEach(d => cats.push({id:d.id, ...d.data()}));
+                const cols = []; colS.forEach(d => cols.push({id:d.id, ...d.data()}));
                 
                 const vars = []; varS.forEach(d => vars.push({id:d.id, ...d.data()}));
                 const prods = []; prodS.forEach(d => { 
@@ -114,12 +159,11 @@ export default function PosPage() {
                     prods.push({ id: d.id, ...p, variants: pVars }); 
                 });
 
-                masterData = { wh, cust, acc, prods };
+                masterData = { wh, cust, acc, prods, cats, cols };
                 localStorage.setItem(CACHE_POS_MASTER, JSON.stringify({ data: masterData, ts: Date.now() }));
                 setLastRefresh(new Date());
             }
 
-            // Filter Akun: Hanya Aset Lancar (Kas/Bank) agar kasir tidak salah pilih
             const allowedCodes = ['1101', '1102', '1103', '1104', '1201'];
             const filteredAccounts = (masterData.acc || []).filter(a => 
                 allowedCodes.includes(String(a.code)) || 
@@ -130,6 +174,8 @@ export default function PosPage() {
             setCustomers(masterData.cust);
             setAccounts(filteredAccounts);
             setProducts(masterData.prods);
+            setCategories(masterData.cats || []);
+            setCollections(masterData.cols || []);
 
             if (!selectedWh && masterData.wh.length > 0) {
                 const defWh = masterData.wh.find(w=>w.type!=='virtual_supplier')?.id || masterData.wh[0].id;
@@ -168,11 +214,10 @@ export default function PosPage() {
         if (typeof window === 'undefined') return;
         localStorage.removeItem(CACHE_POS_SNAPSHOTS);
         localStorage.removeItem('lumina_inventory_v2');
-        localStorage.removeItem('lumina_dash_master_v3');
+        localStorage.removeItem('lumina_dash_master_v4');
         localStorage.removeItem('lumina_sales_history_v2');
         localStorage.removeItem('lumina_balance_v2');
-        localStorage.removeItem('lumina_cash_data_v2');
-        localStorage.removeItem('lumina_cash_transactions_v2'); // Clear Finance Cache
+        localStorage.removeItem('lumina_cash_transactions_v2');
     };
 
     // --- SHORTCUTS ---
@@ -254,7 +299,7 @@ export default function PosPage() {
         } catch(e) { toast.error(e.message, { id: tId }); }
     };
 
-    // --- UPDATED CHECKOUT LOGIC WITH SSOT FINANCE ---
+    // --- CHECKOUT LOGIC WITH SSOT FINANCE ---
     const handleCheckout = async () => {
         if(cart.length === 0) return toast.error("Keranjang kosong");
         const totalRevenue = cart.reduce((a,b) => a + (b.price * b.qty), 0);
@@ -262,26 +307,16 @@ export default function PosPage() {
         if(received < totalRevenue) return toast.error("Uang kurang!");
         if(!paymentAccId) return toast.error("Pilih metode pembayaran (Akun Kas)");
         
-        const toastId = toast.loading("Processing...");
+        const toastId = toast.loading("Processing Transaction...");
         try {
-            // 1. Ambil Settings untuk Mapping Akun Revenue (Pendapatan)
-            let revenueAccId = '';
+            let financeConfig = null;
             const settingSnap = await getDoc(doc(db, "settings", "general"));
             if(settingSnap.exists()) {
-                revenueAccId = settingSnap.data().financeConfig?.defaultRevenueId || '';
+                financeConfig = settingSnap.data().financeConfig;
             }
 
-            // Fallback: Cari manual kode 4101 jika belum disetting (Smart Default)
-            if (!revenueAccId) {
-                const accQ = query(collection(db, "chart_of_accounts"), orderBy("code"));
-                const accS = await getDocs(accQ);
-                const found = accS.docs.find(d => d.data().code === '4101');
-                if (found) revenueAccId = found.id;
-            }
-
-            // Peringatan jika akun pendapatan tidak ditemukan (tetap lanjut agar tidak blocking)
-            if (!revenueAccId) {
-                console.warn("Akun Pendapatan (4101) belum disetting. Transaksi akan masuk Uncategorized.");
+            if (!financeConfig) {
+                financeConfig = { defaultRevenueId: '4101', defaultInventoryId: '1301', defaultCOGSId: '5101' };
             }
 
             const orderId = `POS-${Date.now().toString().slice(-6)}`;
@@ -289,23 +324,28 @@ export default function PosPage() {
             const batch = writeBatch(db);
             
             const totalCost = cart.reduce((a, b) => a + (b.cost * b.qty), 0);
+
             const orderItems = cart.map(i => ({
                 variant_id: i.id, sku: i.sku, product_name: i.name, variant_name: i.spec,
                 qty: i.qty, unit_price: i.price, unit_cost: i.cost, gross_profit_per_item: (i.price - i.cost) * i.qty
             }));
 
-            // A. Create Sales Order
             const soRef = doc(collection(db, "sales_orders"));
             batch.set(soRef, {
                 order_number: orderId, source_file: 'pos_manual',
                 channel_store_name: 'POS / Kasir Toko', warehouse_id: selectedWh,
                 customer_id: selectedCustId || null, buyer_name: custName,
-                financial: { subtotal: totalRevenue, total_sales: totalRevenue, net_payout: totalRevenue, total_hpp: totalCost, gross_profit: totalRevenue - totalCost },
+                financial: { 
+                    subtotal: totalRevenue, 
+                    total_sales: totalRevenue, 
+                    net_payout: totalRevenue, 
+                    total_hpp: totalCost, 
+                    gross_profit: totalRevenue - totalCost 
+                },
                 operational: { status_pickup: 'completed' }, status: 'completed', payment_status: 'paid', payment_account_id: paymentAccId,
                 order_date: serverTimestamp(), items_preview: orderItems
             });
 
-            // B. Create Items & Stock Movements
             for(const item of orderItems) {
                 const itemRef = doc(collection(db, `sales_orders/${soRef.id}/items`));
                 batch.set(itemRef, item);
@@ -317,17 +357,13 @@ export default function PosPage() {
                 batch.set(snapRef, { id: `${item.variant_id}_${selectedWh}`, variant_id: item.variant_id, warehouse_id: selectedWh, qty: increment(-item.qty) }, { merge: true });
             }
             
-            // C. FINANCE AUTOMATION (Use Helper)
             if (received > 0) {
-                recordTransaction(db, batch, {
-                    type: 'in',
-                    amount: totalRevenue,
-                    walletId: paymentAccId,
-                    categoryId: revenueAccId, // Menggunakan ID Akun 4101 dari Settings
-                    categoryName: 'Pendapatan Penjualan',
-                    description: `POS ${orderId} - ${custName}`,
-                    refType: 'sales_order',
-                    refId: soRef.id,
+                recordSalesTransaction(db, batch, {
+                    orderId: orderId,
+                    totalRevenue: totalRevenue,
+                    totalCost: totalCost,
+                    walletId: paymentAccId, 
+                    financeConfig: financeConfig, 
                     userEmail: user?.email
                 });
             }
@@ -359,7 +395,7 @@ export default function PosPage() {
                 <button onClick={() => setActiveMobileTab('cart')} className={`flex-1 py-2 text-xs font-bold uppercase rounded-lg transition-all relative ${activeMobileTab === 'cart' ? 'bg-primary text-white shadow-md' : 'text-text-secondary hover:bg-gray-50'}`}>Keranjang ({cart.length})</button>
             </div>
 
-            {/* HIDDEN RECEIPT (PRINT AREA) */}
+            {/* HIDDEN RECEIPT */}
             <div id="receipt-print-area" className="hidden bg-white text-black font-mono text-xs p-2 max-w-[300px]">
                 <div className="text-center mb-4"><h2 className="text-sm font-bold uppercase">BOBING STORE</h2><p>Terima Kasih</p></div>
                 <div className="border-b border-black border-dashed mb-2"></div>
@@ -378,114 +414,70 @@ export default function PosPage() {
             {/* --- LEFT: PRODUCTS CATALOG --- */}
             <div className={`w-full lg:w-2/3 flex flex-col gap-4 h-full ${activeMobileTab === 'products' ? 'flex' : 'hidden lg:flex'}`}>
                 
-                {/* === CUSTOM MOBILE HEADER (md:hidden) === */}
-                <div className="md:hidden mb-2 bg-surface p-4 rounded-2xl border border-border shadow-sm">
-                    {/* Row 1: Title & Controls */}
-                    <div className="flex justify-between items-start mb-4">
+                {/* === HEADER === */}
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                         <div>
                             <h1 className="text-xl font-display font-bold text-text-primary">Point of Sales</h1>
                             <p className="text-[10px] text-text-secondary mt-0.5 font-medium">Kasir & Transaksi Cepat</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {/* Refresh Button */}
-                            <button 
-                                onClick={handleRefresh} 
-                                className="w-9 h-9 flex items-center justify-center bg-gray-50 hover:bg-gray-100 border border-border rounded-xl text-text-secondary transition-colors active:scale-95"
-                            >
-                                <RotateCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                            </button>
-                            
-                            {/* Warehouse Dropdown */}
-                            <div className="relative w-32">
-                                <select 
-                                    className="appearance-none w-full pl-3 pr-8 py-2 text-[10px] font-bold bg-gray-50 border border-border rounded-xl focus:outline-none focus:border-primary text-text-primary"
-                                    value={selectedWh} 
-                                    onChange={e=>setSelectedWh(e.target.value)}
-                                >
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                            <button onClick={handleRefresh} className="bg-white hover:bg-gray-50 border border-border rounded-xl w-10 h-10 flex items-center justify-center transition-all shadow-sm"><RotateCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></button>
+                            <div className="relative flex-1 md:w-48">
+                                <select className="appearance-none w-full pl-3 pr-8 py-2.5 text-xs font-bold bg-white border border-border rounded-xl focus:outline-none focus:border-primary shadow-sm" value={selectedWh} onChange={e=>setSelectedWh(e.target.value)}>
                                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                                 </select>
-                                <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-text-secondary">
-                                    <ChevronRight className="w-3 h-3 rotate-90" />
-                                </div>
+                                <ChevronRight className="w-3.5 h-3.5 absolute right-3 top-3.5 rotate-90 text-text-secondary pointer-events-none"/>
                             </div>
                         </div>
                     </div>
 
-                    {/* Row 2: Search Bar */}
-                    <div className="relative w-full group">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search className="w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors" />
+                    <div className="space-y-3">
+                        <div className="relative w-full group">
+                            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3 group-focus-within:text-primary transition-colors" />
+                            <input 
+                                ref={searchInputRef} type="text" 
+                                className="block w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-border rounded-xl text-text-primary placeholder:text-text-secondary/60 shadow-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all" 
+                                placeholder="Cari Produk / Scan Barcode (F2)..." 
+                                value={searchTerm} onChange={e => setSearchTerm(e.target.value)} onKeyDown={handleSearchEnter} 
+                            />
                         </div>
-                        <input 
-                            ref={searchInputRef}
-                            type="text" 
-                            className="block w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-border rounded-xl 
-                                    text-text-primary placeholder:text-text-secondary/60
-                                    focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all" 
-                            placeholder="Cari Produk / Scan..." 
-                            value={searchTerm} 
-                            onChange={e => setSearchTerm(e.target.value)} 
-                            onKeyDown={handleSearchEnter} 
-                        />
-                         <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                            <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">F2</span>
-                        </div>
-                    </div>
-                </div>
 
-                {/* === DESKTOP HEADER (hidden md:block) === */}
-                <div className="hidden md:block">
-                    <PageHeader 
-                        title="Point of Sales" 
-                        subtitle="Kasir & Transaksi Cepat"
-                        actions={
-                            <div className="flex flex-col md:flex-row gap-3 items-center w-full md:w-auto">
-                                <div className="relative flex-1 w-full md:w-72 group">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Search className="w-4 h-4 text-gray-400 group-focus-within:text-primary transition-colors" />
-                                    </div>
-                                    <input 
-                                        ref={searchInputRef} 
-                                        type="text" 
-                                        className="block w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-border rounded-xl 
-                                                text-text-primary placeholder:text-text-secondary/60 shadow-sm
-                                                focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all" 
-                                        placeholder="Cari Produk / Scan Barcode..." 
-                                        value={searchTerm} 
-                                        onChange={e => setSearchTerm(e.target.value)} 
-                                        onKeyDown={handleSearchEnter} 
-                                    />
-                                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                                        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">F2</span>
-                                    </div>
-                                </div>
-                                
+                        {/* NEW: FILTER CHIPS (Categories & Collections) */}
+                        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                            <button 
+                                onClick={() => { setActiveCategory('all'); setActiveCollection('all'); }}
+                                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${activeCategory === 'all' && activeCollection === 'all' ? 'bg-primary text-white border-primary shadow-md' : 'bg-white text-text-secondary border-border hover:bg-gray-50'}`}
+                            >
+                                All Items
+                            </button>
+                            
+                            {/* Categories */}
+                            {categories.map(cat => (
                                 <button 
-                                    onClick={handleRefresh} 
-                                    className="bg-white hover:bg-gray-50 text-text-secondary hover:text-primary border border-border rounded-xl w-10 h-10 flex items-center justify-center transition-all shadow-sm hover:shadow active:scale-95"
-                                    title="Refresh Data"
+                                    key={cat.id}
+                                    onClick={() => setActiveCategory(activeCategory === cat.id ? 'all' : cat.id)}
+                                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${activeCategory === cat.id ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-text-secondary border-border hover:bg-gray-50'}`}
                                 >
-                                    <RotateCcw className="w-4 h-4" />
+                                    <Tag className="w-3 h-3"/> {cat.name}
                                 </button>
+                            ))}
 
-                                <div className="relative">
-                                    <select 
-                                        className="appearance-none w-full md:w-48 pl-4 pr-10 py-2.5 text-xs font-bold bg-white border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 text-text-primary shadow-sm cursor-pointer transition-all" 
-                                        value={selectedWh} 
-                                        onChange={e=>setSelectedWh(e.target.value)}
-                                    >
-                                        {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                                    </select>
-                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-secondary">
-                                        <ChevronRight className="w-4 h-4 rotate-90" />
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    />
+                            {/* Collections (Seasons) */}
+                            {collections.map(col => (
+                                <button 
+                                    key={col.id}
+                                    onClick={() => setActiveCollection(activeCollection === col.id ? 'all' : col.id)}
+                                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1 ${activeCollection === col.id ? 'bg-purple-600 text-white border-purple-600 shadow-md' : 'bg-white text-text-secondary border-border hover:bg-gray-50'}`}
+                                >
+                                    <Sparkles className="w-3 h-3"/> {col.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
 
-                {/* PRODUCT GRID (Animated) */}
+                {/* PRODUCT GRID */}
                 <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar pb-24 lg:pb-0">
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 content-start">
                         {loading ? <div className="col-span-full text-center py-20 text-text-secondary animate-pulse">Memuat Katalog...</div> : 
@@ -526,58 +518,39 @@ export default function PosPage() {
                 </div>
             </div>
             
-            {/* --- RIGHT: CART PANEL (Modern with Mobile Close) --- */}
+            {/* --- RIGHT: CART PANEL --- */}
             <motion.div 
                 initial={{ x: 20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 className={`w-full lg:w-[380px] xl:w-[420px] bg-white border-l border-border shadow-2xl flex flex-col h-full z-30 ${activeMobileTab === 'cart' ? 'fixed inset-0' : 'hidden lg:flex'}`}
             >
-                {/* 1. Header: Clean Title & Clear Button */}
+                {/* HEADER */}
                 <div className="p-5 border-b border-border bg-white flex justify-between items-center shrink-0 z-10">
                     <div className="flex items-center gap-3">
-                        {/* MOBILE: CLOSE BUTTON (Updated) */}
-                        <button 
-                            onClick={() => setActiveMobileTab('products')} 
-                            className="lg:hidden p-2 -ml-2 text-text-secondary hover:text-primary hover:bg-gray-100 rounded-full transition-colors"
-                        >
-                            <ArrowLeft className="w-6 h-6" />
-                        </button>
-
+                        <button onClick={() => setActiveMobileTab('products')} className="lg:hidden p-2 -ml-2 text-text-secondary hover:text-primary hover:bg-gray-100 rounded-full transition-colors"><ArrowLeft className="w-6 h-6" /></button>
                         <div>
-                            <h3 className="font-display font-bold text-text-primary text-xl flex items-center gap-2">
-                                <ShoppingCart className="w-5 h-5 text-primary" />
-                                Order
-                            </h3>
+                            <h3 className="font-display font-bold text-text-primary text-xl flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-primary" /> Order</h3>
                             <p className="text-xs text-text-secondary mt-0.5 font-medium">{cart.length} items added</p>
                         </div>
                     </div>
-
-                    <button 
-                        onClick={()=>setCart([])} 
-                        className="text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 group"
-                        title="Clear Cart (F8)"
-                    >
-                        <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
-                        Clear
+                    <button onClick={()=>setCart([])} className="text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 group" title="Clear Cart (F8)">
+                        <Trash2 className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" /> Clear
                     </button>
                 </div>
 
+                {/* CART ITEMS */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#f8f9fc] custom-scrollbar">
                     <AnimatePresence>
                         {cart.length === 0 ? (
                             <motion.div initial={{opacity:0}} animate={{opacity:1}} className="flex flex-col items-center justify-center h-full text-text-secondary opacity-50">
-                                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4 shadow-inner">
-                                    <ShoppingCart className="w-8 h-8 text-gray-300" />
-                                </div>
+                                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4 shadow-inner"><ShoppingCart className="w-8 h-8 text-gray-300" /></div>
                                 <p className="text-sm font-bold text-gray-400">Keranjang Kosong</p>
                                 <p className="text-xs text-gray-400 mt-1">Pilih produk untuk memulai</p>
                             </motion.div>
                         ) : cart.map((item, idx) => (
                             <motion.div 
                                 key={item.id + idx}
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 20 }}
+                                initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
                                 className="bg-white p-3 rounded-xl border border-border shadow-sm flex flex-col gap-3 group hover:border-primary/40 transition-all duration-200"
                             >
                                 <div className="flex justify-between items-start">
@@ -588,9 +561,7 @@ export default function PosPage() {
                                             <span className="text-[10px] font-medium text-text-secondary bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">{item.spec}</span>
                                         </div>
                                     </div>
-                                    <div className="text-sm font-bold text-primary font-mono bg-primary/5 px-2 py-1 rounded-lg shrink-0">
-                                        {formatRupiah(item.price * item.qty)}
-                                    </div>
+                                    <div className="text-sm font-bold text-primary font-mono bg-primary/5 px-2 py-1 rounded-lg shrink-0">{formatRupiah(item.price * item.qty)}</div>
                                 </div>
                                 <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-100">
                                     <div className="text-[11px] text-text-secondary font-medium">@ {formatRupiah(item.price)}</div>
@@ -605,6 +576,7 @@ export default function PosPage() {
                     </AnimatePresence>
                 </div>
 
+                {/* FOOTER CHECKOUT */}
                 <div className="p-6 bg-white border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-40 space-y-5">
                     <div className="grid grid-cols-2 gap-3">
                         <div className="relative z-20">
@@ -636,16 +608,7 @@ export default function PosPage() {
                             <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-border shadow-sm focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
                                 <span className="text-xs font-bold text-text-secondary uppercase ml-1">Uang Diterima</span>
                                 <div className="flex items-center">
-                                    <NumericFormat 
-                                        className="text-right font-bold text-text-primary bg-transparent outline-none w-40 text-xl placeholder:text-gray-300" 
-                                        placeholder="0" 
-                                        value={cashReceived} 
-                                        onValueChange={(values) => { setCashReceived(values.floatValue || ''); }}
-                                        prefix="Rp " 
-                                        thousandSeparator="." 
-                                        decimalSeparator="," // FIX: Wajib ada jika thousandSeparator titik
-                                        allowNegative={false}
-                                    />
+                                    <NumericFormat className="text-right font-bold text-text-primary bg-transparent outline-none w-40 text-xl placeholder:text-gray-300" placeholder="0" value={cashReceived} onValueChange={(values) => { setCashReceived(values.floatValue || ''); }} prefix="Rp " thousandSeparator="." decimalSeparator="," allowNegative={false} />
                                 </div>
                             </div>
                             {(cashReceived > 0 || change !== 0) && (
@@ -664,7 +627,7 @@ export default function PosPage() {
                 </div>
             </motion.div>
 
-            {/* --- MODAL 1: VARIANT SELECTION (Refined) --- */}
+            {/* MODALS (Variant, Invoice, Customer) tetap sama, hanya layout filter yang berubah */}
             <Portal>
                 {modalVariantOpen && selectedProdForVariant && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
@@ -713,7 +676,6 @@ export default function PosPage() {
                 )}
             </Portal>
 
-            {/* --- MODAL 2: INVOICE (Receipt Look) --- */}
             <Portal>
                 {modalInvoiceOpen && invoiceData && (
                     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in">
@@ -737,7 +699,7 @@ export default function PosPage() {
                                         <div className="flex justify-between text-sm"><span className="text-text-secondary">Total Tagihan</span><span className="font-bold text-text-primary">{formatRupiah(invoiceData.total)}</span></div>
                                         <div className="flex justify-between text-sm"><span className="text-text-secondary">Tunai</span><span className="font-mono">{formatRupiah(invoiceData.received)}</span></div>
                                     </div>
-                                    <div className="bg-emerald-50 rounded-lg p-3 flex justify-between items-center border border-emerald-100">
+                                    <div className="bg-emerald-5 rounded-lg p-3 flex justify-between items-center border border-emerald-100">
                                         <span className="text-xs font-bold text-emerald-700 uppercase">Kembali</span>
                                         <span className="text-lg font-bold text-emerald-700">{formatRupiah(Math.max(0, invoiceData.change))}</span>
                                     </div>
@@ -752,7 +714,6 @@ export default function PosPage() {
                 )}
             </Portal>
 
-            {/* --- MODAL 3: QUICK ADD CUSTOMER (Modern Form) --- */}
             <Portal>
             {modalCustomerOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">

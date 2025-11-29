@@ -1,7 +1,11 @@
+// app/(dashboard)/sales/transactions/page.js
 "use client";
 import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, limit, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+    collection, getDocs, query, orderBy, limit, doc, updateDoc, 
+    serverTimestamp, writeBatch, increment, getDoc, deleteDoc 
+} from 'firebase/firestore';
 import { formatRupiah } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -9,9 +13,13 @@ import toast from 'react-hot-toast';
 import { 
     Search, RotateCcw, Filter, Calendar, ChevronDown, ChevronRight, ChevronUp,
     Edit2, Save, X, Package, Truck, User, CreditCard, 
-    TrendingUp, CheckCircle, Clock, ExternalLink 
+    TrendingUp, CheckCircle, Clock, ExternalLink, Trash2, AlertTriangle 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// --- INTEGRASI FINANCE (HELPER) ---
+// Opsional: Jika file ini ada, kita pakai. Jika tidak, logic manual di bawah tetap jalan.
+// import { recordTransaction } from '@/lib/transactionService';
 
 export default function TransactionsHistoryPage() {
     // --- 1. SETUP DEFAULT DATE (HARI INI) ---
@@ -86,6 +94,113 @@ export default function TransactionsHistoryPage() {
         }
     };
 
+    // --- NEW FEATURE: HANDLE DELETE (VOID) WITH FINANCE REVERSAL ---
+    const handleDelete = async (order) => {
+        if (!confirm(`PERINGATAN: Menghapus Transaksi #${order.display_order_number} akan:\n1. Mengembalikan Stok ke Gudang\n2. Membatalkan Jurnal Keuangan (Uang Keluar)\n\nLanjutkan?`)) return;
+        
+        const tId = toast.loading("Memproses Void...");
+        try {
+            const batch = writeBatch(db);
+            
+            // 1. Ambil Config Finance (Untuk tahu akun mana yang dibalik)
+            const settingSnap = await getDoc(doc(db, "settings", "general"));
+            const financeConfig = settingSnap.exists() ? settingSnap.data().financeConfig : null;
+
+            // 2. Ambil Item Detail untuk kembalikan Stok
+            const itemsSnap = await getDocs(collection(db, `sales_orders/${order.id}/items`));
+            
+            // A. KEMBALIKAN STOK (REVERT INVENTORY)
+            itemsSnap.forEach((itemDoc) => {
+                const item = itemDoc.data();
+                const whId = order.warehouse_id || 'WH-Utama'; // Fallback
+                const snapId = `${item.variant_id}_${whId}`;
+                
+                // Update Snapshot (+ Qty)
+                const snapRef = doc(db, "stock_snapshots", snapId);
+                batch.update(snapRef, { qty: increment(item.qty) });
+
+                // Catat Movement (Void In)
+                const moveRef = doc(collection(db, "stock_movements"));
+                batch.set(moveRef, {
+                    variant_id: item.variant_id,
+                    warehouse_id: whId,
+                    type: 'adjustment_in',
+                    qty: item.qty,
+                    date: serverTimestamp(),
+                    ref_id: order.id,
+                    notes: `Void Sales #${order.display_order_number}`
+                });
+            });
+
+            // B. BALIKAN JURNAL KEUANGAN (REVERSE JOURNAL)
+            // Hanya jika status Paid dan ada config finance
+            if (financeConfig && order.payment_status === 'paid') {
+                const walletId = order.payment_account_id;
+                
+                if (walletId) {
+                    // 1. Uang Keluar dari Kas (Refund/Void)
+                    const revRef = doc(collection(db, "cash_transactions"));
+                    batch.set(revRef, {
+                        account_id: walletId,
+                        type: 'out', // Kredit Kas
+                        amount: order.fin_gross,
+                        debit: 0,
+                        credit: order.fin_gross,
+                        category: 'Refund / Void Sales',
+                        description: `Void POS #${order.display_order_number}`,
+                        ref_id: order.id,
+                        ref_type: 'sales_void',
+                        created_at: serverTimestamp(),
+                        date: serverTimestamp()
+                    });
+
+                    // Update Saldo Kas (-)
+                    batch.update(doc(db, "chart_of_accounts", walletId), {
+                        balance: increment(-order.fin_gross)
+                    });
+
+                    // Update Saldo Pendapatan (-)
+                    if(financeConfig.defaultRevenueId) {
+                        batch.update(doc(db, "chart_of_accounts", financeConfig.defaultRevenueId), {
+                            balance: increment(-order.fin_gross)
+                        });
+                    }
+
+                    // 2. Revert HPP (Jika ada data cost)
+                    // Inventory Debit (+), HPP Kredit (-)
+                    if (order.fin_cost > 0) {
+                        if(financeConfig.defaultInventoryId) {
+                            batch.update(doc(db, "chart_of_accounts", financeConfig.defaultInventoryId), {
+                                balance: increment(order.fin_cost)
+                            });
+                        }
+                        if(financeConfig.defaultCOGSId) {
+                            batch.update(doc(db, "chart_of_accounts", financeConfig.defaultCOGSId), {
+                                balance: increment(-order.fin_cost)
+                            });
+                        }
+                    }
+                }
+            }
+
+            // C. HAPUS DOKUMEN ORDER
+            batch.delete(doc(db, "sales_orders", order.id));
+            
+            await batch.commit();
+            
+            // Invalidate Cache
+            localStorage.removeItem('lumina_sales_history_v2');
+            localStorage.removeItem('lumina_dash_master_v4');
+            
+            toast.success("Transaksi Berhasil Dibatalkan (Void)", { id: tId });
+            fetchOrders(); // Refresh Data
+
+        } catch (e) {
+            console.error(e);
+            toast.error("Gagal Void: " + e.message, { id: tId });
+        }
+    };
+
     // --- ACCORDION TOGGLE ---
     const toggleSection = (orderId, section) => {
         setSectionState(prev => ({
@@ -97,7 +212,7 @@ export default function TransactionsHistoryPage() {
         }));
     };
 
-    // --- EDIT HANDLERS ---
+    // --- EDIT HANDLERS (ORIGINAL) ---
     const startEdit = (order) => {
         setEditingId(order.id);
         setEditForm({
@@ -164,7 +279,7 @@ export default function TransactionsHistoryPage() {
         }
     };
 
-    // --- FILTER LOGIC ---
+    // --- FILTER LOGIC (ORIGINAL) ---
     const filteredOrders = orders.filter(order => {
         const matchChannel = filterChannel === 'all' || order.display_channel === filterChannel;
         const matchStatus = filterStatus === 'all' || order.display_status === filterStatus;
@@ -424,9 +539,14 @@ export default function TransactionsHistoryPage() {
                                                                             </button>
                                                                         </div>
                                                                     ) : (
-                                                                        <button onClick={()=>startEdit(order)} className="text-xs text-primary hover:underline flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-primary/20 hover:bg-blue-50 transition-colors">
-                                                                            <Edit2 className="w-3 h-3"/> Edit Data
-                                                                        </button>
+                                                                        <div className="flex gap-2">
+                                                                            <button onClick={()=>handleDelete(order)} className="text-xs text-rose-500 hover:bg-rose-50 flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-rose-200 transition-colors">
+                                                                                <Trash2 className="w-3 h-3"/> Batalkan (Void)
+                                                                            </button>
+                                                                            <button onClick={()=>startEdit(order)} className="text-xs text-primary hover:underline flex items-center gap-1 bg-white px-3 py-1.5 rounded-lg border border-primary/20 hover:bg-blue-50 transition-colors">
+                                                                                <Edit2 className="w-3 h-3"/> Edit Data
+                                                                            </button>
+                                                                        </div>
                                                                     )}
                                                                 </div>
 

@@ -2,13 +2,13 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, serverTimestamp, updateDoc, limit } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, query, orderBy, serverTimestamp, updateDoc, limit, writeBatch } from 'firebase/firestore';
 import { Portal } from '@/lib/usePortal';
 import toast from 'react-hot-toast';
 import { formatRupiah } from '@/lib/utils';
 
 // UI
-import { Search, Plus, Trash2, Edit2, ShieldCheck, ShieldAlert, X, Landmark } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, ShieldCheck, ShieldAlert, X, Landmark, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const CACHE_KEY = 'lumina_finance_accounts_v2';
@@ -24,15 +24,15 @@ export default function FinanceAccountsPage() {
   // State Form
   const [formData, setFormData] = useState({ id: null, code: '', name: '', category: '' });
 
-  // Kategori Standar Akuntansi (Urutan Laporan Keuangan)
+  // Kategori Standar Akuntansi (Title Case - Rapi)
   const accountCategories = [
-    'ASET (ASSETS)', 
-    'ASET (CONTRA)', 
-    'KEWAJIBAN (LIABILITIES)', 
-    'EKUITAS (EQUITY)', 
-    'PENDAPATAN (REVENUE)', 
-    'PENDAPATAN (CONTRA)', 
-    'BEBAN (EXPENSES)'
+    'Aset (Assets)', 
+    'Aset (Contra)', 
+    'Kewajiban (Liabilities)', 
+    'Ekuitas (Equity)', 
+    'Pendapatan (Revenue)', 
+    'Pendapatan (Contra)', 
+    'Beban (Expenses)'
   ];
 
   useEffect(() => { fetchAccounts(); }, []);
@@ -40,8 +40,8 @@ export default function FinanceAccountsPage() {
   const invalidateCaches = () => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(CACHE_KEY);
-    localStorage.removeItem('lumina_cash_transactions_v2'); // Refresh transaksi karena nama akun mungkin berubah
-    localStorage.removeItem('lumina_balance_v2'); // Refresh Neraca
+    localStorage.removeItem('lumina_cash_transactions_v2'); 
+    localStorage.removeItem('lumina_balance_v2'); 
   };
 
   const fetchAccounts = async (forceRefresh = false) => {
@@ -69,6 +69,51 @@ export default function FinanceAccountsPage() {
     } catch (error) { toast.error('Gagal memuat akun'); } finally { setLoading(false); }
   };
 
+  // --- BATCH FIX CATEGORIES (COSMETIC UPDATE) ---
+  const handleBatchFix = async () => {
+      if (!confirm("Jalankan perbaikan kosmetik kategori (Uppercase -> Title Case)?")) return;
+      
+      const tId = toast.loading("Memperbaiki Kategori...");
+      try {
+          const batch = writeBatch(db);
+          let count = 0;
+
+          accounts.forEach(acc => {
+              let newCat = acc.category;
+              const catUpper = acc.category.toUpperCase();
+
+              // Mapping Logic
+              if (catUpper.includes('ASET') && catUpper.includes('CONTRA')) newCat = 'Aset (Contra)';
+              else if (catUpper.includes('ASET') || catUpper.includes('ASSET')) newCat = 'Aset (Assets)';
+              else if (catUpper.includes('KEWAJIBAN') || catUpper.includes('LIABILITIES')) newCat = 'Kewajiban (Liabilities)';
+              else if (catUpper.includes('EKUITAS') || catUpper.includes('EQUITY')) newCat = 'Ekuitas (Equity)';
+              else if (catUpper.includes('PENDAPATAN') && catUpper.includes('CONTRA')) newCat = 'Pendapatan (Contra)';
+              else if (catUpper.includes('PENDAPATAN') || catUpper.includes('REVENUE')) newCat = 'Pendapatan (Revenue)';
+              else if (catUpper.includes('BEBAN') || catUpper.includes('EXPENSE')) newCat = 'Beban (Expenses)';
+
+              // Update jika berbeda
+              if (newCat !== acc.category) {
+                  const ref = doc(db, "chart_of_accounts", acc.id);
+                  batch.update(ref, { category: newCat });
+                  count++;
+              }
+          });
+
+          if (count > 0) {
+              await batch.commit();
+              invalidateCaches();
+              fetchAccounts(true);
+              toast.success(`Berhasil memperbaiki ${count} akun!`, { id: tId });
+          } else {
+              toast.success("Semua kategori sudah rapi.", { id: tId });
+          }
+
+      } catch (e) {
+          console.error(e);
+          toast.error("Gagal update batch", { id: tId });
+      }
+  };
+
   const toggleStatus = async (id, currentStatus) => {
     const t = toast.loading("Updating...");
     try {
@@ -91,7 +136,6 @@ export default function FinanceAccountsPage() {
     const tId = toast.loading("Menyimpan...");
     
     try {
-      // Validasi Duplikat Kode (Hanya jika create baru atau ganti kode)
       if (!formData.id || (formData.id && accounts.find(a => a.id === formData.id)?.code !== formData.code)) {
           if (accounts.some(a => a.code === formData.code)) throw new Error('Kode akun sudah ada!');
       }
@@ -104,16 +148,10 @@ export default function FinanceAccountsPage() {
       };
 
       if (formData.id) {
-          // Edit Mode
           await updateDoc(doc(db, 'chart_of_accounts', formData.id), payload);
       } else {
-          // Create Mode
-          // Penting: Inisialisasi balance 0 untuk logic Double Entry
           await addDoc(collection(db, 'chart_of_accounts'), {
-            ...payload, 
-            balance: 0, 
-            status: 'Aktif', 
-            created_at: serverTimestamp()
+            ...payload, balance: 0, status: 'Aktif', created_at: serverTimestamp()
           });
       }
 
@@ -157,9 +195,14 @@ export default function FinanceAccountsPage() {
                 onChange={e => setSearchTerm(e.target.value)}
             />
         </div>
-        <button onClick={() => { setFormData({id:null, code:'', name:'', category:''}); setModalOpen(true); }} className="btn-gold flex items-center gap-2 shadow-lg">
-          <Plus className="w-4 h-4 stroke-[3px]" /> Add Account
-        </button>
+        <div className="flex gap-2">
+            <button onClick={handleBatchFix} className="btn-ghost-dark text-xs px-3 py-2 flex items-center gap-2 border-amber-200 text-amber-700 hover:bg-amber-50" title="Rapikan nama kategori">
+                <Zap className="w-4 h-4" /> Fix Categories
+            </button>
+            <button onClick={() => { setFormData({id:null, code:'', name:'', category:''}); setModalOpen(true); }} className="btn-gold flex items-center gap-2 shadow-lg">
+                <Plus className="w-4 h-4 stroke-[3px]" /> Add Account
+            </button>
+        </div>
       </div>
 
       {/* Table Card */}
@@ -186,23 +229,14 @@ export default function FinanceAccountsPage() {
                   const isActive = account.status === 'Aktif' || account.status === 'Active';
                   return (
                     <tr key={account.id} className="hover:bg-gray-50 transition-colors group">
-                      {/* 1. CODE */}
                       <td className="pl-6 py-3 font-mono font-bold text-primary">{account.code}</td>
-                      
-                      {/* 2. NAME */}
                       <td className="py-3 font-medium text-text-primary">{account.name}</td>
-                      
-                      {/* 3. CATEGORY */}
                       <td className="py-3">
                         <span className="text-[10px] bg-gray-100 px-2 py-1 rounded border border-border text-text-secondary font-bold uppercase">{account.category}</span>
                       </td>
-                      
-                      {/* 4. BALANCE (NEW) - SSOT */}
                       <td className="py-3 text-right font-mono font-medium text-text-primary">
                         {formatRupiah(account.balance || 0)}
                       </td>
-
-                      {/* 5. STATUS */}
                       <td className="text-center py-3">
                         <button
                           onClick={() => toggleStatus(account.id, account.status)}
@@ -212,8 +246,6 @@ export default function FinanceAccountsPage() {
                           {isActive ? 'Active' : 'Inactive'}
                         </button>
                       </td>
-
-                      {/* 6. ACTIONS */}
                       <td className="text-right pr-6 py-3">
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => openEdit(account)} className="p-2 text-text-secondary hover:text-primary hover:bg-blue-50 rounded-lg transition-colors">
@@ -257,7 +289,7 @@ export default function FinanceAccountsPage() {
                     maxLength="10" 
                     required 
                     autoFocus
-                    disabled={!!formData.id} // Kode tidak boleh diganti saat edit untuk menjaga konsistensi data
+                    disabled={!!formData.id} 
                   />
                   {formData.id && <p className="text-[10px] text-amber-600 mt-1">*Kode akun tidak dapat diubah.</p>}
                 </div>

@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import PageHeader from '@/components/PageHeader';
 
-// --- DEFINISI DATA TAB (Dipindahkan dari page.js) ---
+// --- DEFINISI DATA TAB (UPDATED) ---
 const CATALOG_TABS = [
     { path: "/catalog/products", label: "Products" },
     { path: "/catalog/variants", label: "Variants" },
     { path: "/catalog/categories", label: "Categories" },
+    { path: "/catalog/collections", label: "Collections" }, // [NEW] Menu Koleksi Ditambahkan
     { path: "/catalog/brands", label: "Brands" },
     { path: "/catalog/import", label: "Import" },
 ];
@@ -27,13 +28,13 @@ export default function CatalogLayout({ children }) {
             />
             
             {/* Tabs Navigation (UI yang PERSISTEN/PINNED) */}
-            <div className='flex space-x-4 border-b border-border/50'>
+            <div className='flex space-x-4 border-b border-border/50 overflow-x-auto'>
                 {CATALOG_TABS.map((tab) => (
                     <Link
                         key={tab.path}
                         href={tab.path}
                         className={`
-                            flex items-center gap-2 py-3 px-4 text-sm font-semibold transition-colors duration-200
+                            flex items-center gap-2 py-3 px-4 text-sm font-semibold transition-colors duration-200 whitespace-nowrap
                             ${isActive(tab.path) 
                                 // Kelas yang sudah kita refactor (primary dan border)
                                 ? 'text-text-primary border-b-2 border-primary' 

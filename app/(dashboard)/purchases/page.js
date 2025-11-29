@@ -7,5 +7,5 @@ import { redirect } from 'next/navigation';
  * Langsung mengarahkan pengguna ke halaman daftar pemasok (/purchases/suppliers).
  */
 export default function PurchasesRootPage() {
-  redirect('/purchases/suppliers');
+  redirect('/purchases/overview');
 }
