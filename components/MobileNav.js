@@ -7,12 +7,14 @@ import { useAuth } from '@/context/AuthContext';
 import { Portal } from '@/lib/usePortal';
 import { navData, footerNav } from '@/lib/navData';
 // FIX: Import D_DASH dan D_POS secara langsung agar tidak error jika navData berubah
-import { NavIcon, D_MONEY, D_DASH, D_POS } from '@/components/DashboardIcons'; 
+import { NavIcon, D_MONEY, D_DASH, D_POS } from '@/components/DashboardIcons';
+import { Plus, ShoppingCart, Box, FileText, X } from 'lucide-react';
 
 export default function MobileNav() {
   const pathname = usePathname();
   const { user } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(false); // STATE BARU
 
   if (!user || pathname === '/login') return null;
 
@@ -68,16 +70,43 @@ export default function MobileNav() {
         {/* Menggunakan D_POS yang diimport langsung */}
         <NavItem href="/sales/manual" iconD={D_POS} label="POS" />
         
-        {/* Center Menu Button (Floating Look) */}
+        {/* --- REVISI TOMBOL TENGAH --- */}
         <div className="relative -top-5">
-            <button onClick={toggleMenu} className="w-14 h-14 bg-gradient-to-br from-primary to-accent rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/30 active:scale-95 transition-transform border-4 border-white">
-                <NavIcon d="M4 6h16M4 12h16M4 18h16" active={true} size="w-6 h-6" />
+            <button 
+                onClick={() => setShowQuickActions(!showQuickActions)} 
+                className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/30 transition-all duration-300 border-4 border-white ${showQuickActions ? 'bg-rose-500 rotate-45' : 'bg-gradient-to-br from-primary to-accent'}`}
+            >
+                {/* Gunakan Icon Plus dari Lucide biar konsisten */}
+                <Plus className="w-8 h-8" strokeWidth={3} />
             </button>
         </div>
 
         <NavItem href="/finance" iconD={D_MONEY} label="Finance" />
         <NavItem href={footerNav.href} iconD={footerNav.iconD} label="System" />
       </div>
+
+      {/* --- NEW: QUICK ACTION POPUP --- */}
+      <Portal>
+        {showQuickActions && (
+            <>
+                <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-[2px] animate-fade-in" onClick={()=>setShowQuickActions(false)} />
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 w-max animate-slide-up">
+                    <Link href="/sales/manual" onClick={()=>setShowQuickActions(false)} className="flex items-center gap-4 bg-white pl-4 pr-6 py-3 rounded-full shadow-xl shadow-blue-900/10 active:scale-95 transition-transform">
+                        <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><ShoppingCart className="w-5 h-5"/></div>
+                        <span className="font-bold text-text-primary text-sm">Transaksi Kasir</span>
+                    </Link>
+                    <Link href="/purchases/overview" onClick={()=>setShowQuickActions(false)} className="flex items-center gap-4 bg-white pl-4 pr-6 py-3 rounded-full shadow-xl shadow-blue-900/10 active:scale-95 transition-transform">
+                        <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center"><Box className="w-5 h-5"/></div>
+                        <span className="font-bold text-text-primary text-sm">Stok Masuk (PO)</span>
+                    </Link>
+                    <Link href="/finance/cash" onClick={()=>setShowQuickActions(false)} className="flex items-center gap-4 bg-white pl-4 pr-6 py-3 rounded-full shadow-xl shadow-blue-900/10 active:scale-95 transition-transform">
+                        <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center"><FileText className="w-5 h-5"/></div>
+                        <span className="font-bold text-text-primary text-sm">Catat Pengeluaran</span>
+                    </Link>
+                </div>
+            </>
+        )}
+      </Portal>
 
       {/* FULLSCREEN DRAWER MENU */}
       {isMenuOpen && (

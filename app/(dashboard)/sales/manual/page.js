@@ -482,8 +482,12 @@ export default function PosPage() {
                     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 content-start">
                         {loading ? <div className="col-span-full text-center py-20 text-text-secondary animate-pulse">Memuat Katalog...</div> : 
                          filteredProducts.length === 0 ? <div className="col-span-full text-center py-20 text-text-secondary flex flex-col items-center"><Package className="w-12 h-12 mb-2 opacity-20"/>Produk tidak ditemukan</div> :
-                         filteredProducts.map((p, idx) => {
-                            const stock = p.variants.reduce((a,b) => a + (snapshots[`${b.id}_${selectedWh}`] || 0), 0);
+                         filteredProducts.map((p, idx) => {const cartQty = cart.reduce((acc, item) => {
+                                // Cek apakah item.id (variant_id di cart) ada di list varian produk ini
+                                const isVariantOfProduct = p.variants.some(v => v.id === item.id);
+                                return isVariantOfProduct ? acc + item.qty : acc;
+                            }, 0);
+
                             return (
                                 <motion.div 
                                     initial={{ opacity: 0, y: 10 }}
@@ -493,6 +497,13 @@ export default function PosPage() {
                                     onClick={() => { setSelectedProdForVariant(p); setModalVariantOpen(true); }} 
                                     className={`bg-white rounded-2xl cursor-pointer border border-border hover:border-primary hover:ring-4 hover:ring-primary/5 hover:shadow-lg hover:-translate-y-1 transition-all flex flex-col justify-between group overflow-hidden h-full relative ${stock<=0?'opacity-60 grayscale':''}`}
                                 >
+                                    {/* BADGE BARU */}
+                                    {cartQty > 0 && (
+                                        <div className="absolute top-2 right-2 z-10 bg-primary text-white text-[10px] font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-md border-2 border-white animate-bounce">
+                                            {cartQty}
+                                        </div>
+                                    )}
+
                                     <div className="p-4 flex-1">
                                         <div className="flex justify-between items-start mb-2">
                                             <span className="text-[10px] font-mono font-bold text-text-secondary bg-gray-50 px-2 py-1 rounded-md border border-gray-100 tracking-tight">{p.base_sku}</span>

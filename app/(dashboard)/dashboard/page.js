@@ -12,8 +12,10 @@ import Skeleton from '@/components/Skeleton';
 // --- MODERN UI IMPORTS ---
 import { 
     TrendingUp, DollarSign, Wallet, Package, ArrowUpRight, 
-    AlertTriangle, ShoppingBag, Calendar, Filter, ChevronRight 
+    AlertTriangle, ShoppingBag, Calendar, Filter, ChevronRight,
+    PlusCircle, ShoppingCart, Truck, RefreshCw
 } from 'lucide-react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, ArcElement);
@@ -353,6 +355,41 @@ export default function Dashboard() {
                     </div>
                 }
             />
+
+            {/* --- NEW: QUICK ACTION BAR (Desktop & Mobile) --- */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <Link href="/sales/manual" className="group flex items-center gap-3 p-4 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+                    <div className="bg-white/20 p-2 rounded-lg group-hover:rotate-6 transition-transform"><ShoppingCart className="w-5 h-5"/></div>
+                    <div className="leading-tight">
+                        <span className="block text-xs opacity-80 font-medium text-blue-100">Buat</span>
+                        <span className="font-bold text-sm">Kasir Baru</span>
+                    </div>
+                </Link>
+                
+                <Link href="/purchases/overview" className="group flex items-center gap-3 p-4 bg-white border border-border text-text-primary rounded-xl shadow-sm hover:border-primary/50 transition-all">
+                    <div className="bg-orange-50 text-orange-600 p-2 rounded-lg group-hover:scale-110 transition-transform"><Truck className="w-5 h-5"/></div>
+                    <div className="leading-tight">
+                        <span className="block text-xs text-text-secondary">Input</span>
+                        <span className="font-bold text-sm">Stok Masuk</span>
+                    </div>
+                </Link>
+
+                <Link href="/stock/inventory" className="group flex items-center gap-3 p-4 bg-white border border-border text-text-primary rounded-xl shadow-sm hover:border-primary/50 transition-all">
+                    <div className="bg-purple-50 text-purple-600 p-2 rounded-lg group-hover:scale-110 transition-transform"><RefreshCw className="w-5 h-5"/></div>
+                    <div className="leading-tight">
+                        <span className="block text-xs text-text-secondary">Cek</span>
+                        <span className="font-bold text-sm">Stok Fisik</span>
+                    </div>
+                </Link>
+                
+                <Link href="/finance/cash" className="group flex items-center gap-3 p-4 bg-white border border-border text-text-primary rounded-xl shadow-sm hover:border-primary/50 transition-all">
+                    <div className="bg-emerald-50 text-emerald-600 p-2 rounded-lg group-hover:scale-110 transition-transform"><PlusCircle className="w-5 h-5"/></div>
+                    <div className="leading-tight">
+                        <span className="block text-xs text-text-secondary">Catat</span>
+                        <span className="font-bold text-sm">Beban/Biaya</span>
+                    </div>
+                </Link>
+            </div>
 
             {/* KPI Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
